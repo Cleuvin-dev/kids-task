@@ -4,6 +4,10 @@
 
 **Estado atual:** Marco 0 — Fundação concluído. Marco 1 — Autenticação e
 Família concluído (com bloqueios de infraestrutura documentados abaixo).
+**Ciclo pausado aqui a pedido do proprietário do produto** — a implementação
+retoma no **Marco 2 — Rotina e Tarefas** numa sessão futura. Este documento e
+o `git log` são a fonte de verdade do que já existe; ler esta seção e a
+"Próxima ação" antes de continuar.
 
 ## Repositório
 
@@ -126,13 +130,39 @@ ponta a ponta:
    no Marco 0; bloqueia testes de integração reais, não a lógica implementada.
 5. **CI ainda não rodou em GitHub Actions** — pendente do primeiro push/PR.
 
+## Build de verificação manual (release APK)
+
+Para permitir instalar o app num celular Android e conferir visualmente o
+que existe até aqui, foi gerado um APK release
+(`apps/mobile/build/app/outputs/flutter-apk/app-release.apk`), assinado com
+a chave de debug padrão do Flutter (`signingConfig = signingConfigs.debug`
+em `android/app/build.gradle.kts` — suficiente para instalar num aparelho
+próprio via "instalar de fontes desconhecidas", não serve para publicar na
+Play Store).
+
+Como não existe projeto Supabase real ainda (bloqueio já listado acima), o
+build usa credenciais **placeholder** (`apps/mobile/env/dev.json`, ignorado
+pelo Git). Isso significa:
+
+- o app abre normalmente até a tela de acesso comum (splash → "Sou
+  responsável"/"Sou criança"), com o ícone, o splash e o visual reais;
+- os formulários (entrar, criar conta, código da família etc.) abrem e
+  validam campos normalmente;
+- qualquer ação que precise falar com o backend de verdade (cadastrar,
+  entrar, criar família) vai falhar com erro genérico, porque
+  `https://example.supabase.co` não existe — isso é esperado, não é um bug.
+
+Quando houver um projeto Supabase real, gerar `env/dev.json` com os valores
+verdadeiros (formato documentado em `.env.example`) e rebuildar para testar
+o fluxo completo de ponta a ponta.
+
 ## Próxima ação
 
-Marco 2 — Rotina e Tarefas: catálogo de ícones/tarefas, agendas (recorrente,
-data única, bônus, sem horário, com prazo), geração de ocorrências, limite
-gratuito de três por dia, tela "Hoje" real para a criança, conclusão
-automática/manual, rejeição/correção, atraso/expiração, Realtime, histórico —
-sobre a base de família/criança já criada no Marco 1.
+Retomar no **Marco 2 — Rotina e Tarefas**: catálogo de ícones/tarefas,
+agendas (recorrente, data única, bônus, sem horário, com prazo), geração de
+ocorrências, limite gratuito de três por dia, tela "Hoje" real para a
+criança, conclusão automática/manual, rejeição/correção, atraso/expiração,
+Realtime, histórico — sobre a base de família/criança já criada no Marco 1.
 
 Antes de iniciar novas telas, recomenda-se validar este Marco 1 num ambiente
 com Docker (`supabase start`, `supabase db lint --local`, `supabase test db`)
