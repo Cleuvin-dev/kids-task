@@ -11,6 +11,7 @@ dependencies:
     path: ../domain
   flutter:
     sdk: flutter
+  flutter_riverpod: ^2.6.1
   meta: ^1.16.0
   supabase_flutter: ^2.10.0
 

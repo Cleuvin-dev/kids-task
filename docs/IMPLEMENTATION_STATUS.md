@@ -2,54 +2,93 @@
 
 **Última atualização:** 31/07/2026
 
-**Estado atual:** Marco 0 — Fundação concluído.
+**Estado atual:** Marco 0 — Fundação concluído. Marco 1 — Autenticação e
+Família concluído (com bloqueios de infraestrutura documentados abaixo).
 
 ## Repositório
 
-- Estrutura: monorepo criado conforme `docs/08_ARQUITETURA_TECNICA.md` —
+- Estrutura: monorepo conforme `docs/08_ARQUITETURA_TECNICA.md` —
   `apps/mobile`, `apps/admin_web`, `packages/{domain,data_access,design_system}`,
   `supabase/{migrations,functions,tests}`, `docs/adr`.
-- Flutter mobile (`apps/mobile`): projeto Flutter Android/iOS (`org com.kidstask`),
-  compila, com tela de fundação usando tema, l10n (pt) e `go_router` ligados.
-- Admin Web (`apps/admin_web`): projeto Flutter Web, compila, mesma estrutura
-  de fundação, tema e l10n próprios.
-- Packages compartilhados:
-  - `domain`: Dart puro (sem Flutter). `UserRole`, `DomainErrorCode`,
-    `DomainFailure`, `Result<T>`.
-  - `data_access`: depende de Flutter + `supabase_flutter`. `SupabaseEnv`
-    (config via `--dart-define-from-file`) e `KidsTaskSupabase` (inicialização
-    única do cliente).
-  - `design_system`: Flutter. Tokens semânticos (`KidsTaskTokens`), temas
-    azul/rosa do responsável e Tema Infantil Padrão (placeholder de cor,
-    sem asset final).
-- Supabase local: `supabase/config.toml` gerado via CLI (`npx supabase init`),
-  primeira migration de fundação (extensão `pgcrypto` + trigger
-  `set_updated_at`), `seed.sql` vazio documentado, teste pgTAP de fundação em
-  `supabase/tests/database/00_foundation_test.sql`, `supabase/functions/README.md`
-  com convenções para a primeira Edge Function (Marco 1).
-- CI: `.github/workflows/ci.yml` com jobs de formatação/análise/teste por
-  pacote e app, build de fumaça Android (debug) + Web, build de fumaça iOS
-  (`--no-codesign`, runner macOS), lint/teste do banco via Supabase CLI
-  (`supabase start` + `db lint` + `test db`) e verificação de segredos
-  (`gitleaks`). Ainda não executado em CI real (sem push/PR neste ciclo).
-- `.env.example`: documentado na raiz (Supabase URL/publishable key, Firebase
-  project id, IDs de produto de loja); nenhum segredo de backend incluído.
-- `docs/adr/0001-autenticacao-infantil.md`: decisão de sessão anônima do
-  Supabase + `child_device_bindings` + Edge Function + RLS, com alternativas
-  rejeitadas e consequências.
-- Supabase CLI local: instalado como devDependency npm (`npx supabase`,
-  v2.111.0) — ver bloqueios abaixo sobre Docker.
+- Identidade visual: assets reais de `img/` processados (remoção de fundo de
+  croma, recorte, recompressão) em `packages/design_system/assets` e
+  `packages/design_system/branding` — ver
+  `packages/design_system/assets/README.md` para a origem de cada arquivo.
+  Ícone do app (Android/iOS) e splash nativo gerados a partir dessas artes
+  via `flutter_launcher_icons`/`flutter_native_splash`; favicon/ícones Web do
+  `admin_web` também atualizados.
+
+### apps/mobile
+
+Aplicativo único (responsável + criança) com fluxo de autenticação real de
+ponta a ponta:
+
+- Entrada comum (`/access`) com fundo `tela-de-login.png` e wordmark.
+- Responsável: cadastro/login por e-mail e senha (com tela de "confirme seu
+  e-mail" quando a confirmação é exigida), "esqueci minha senha".
+- Consentimento (`/onboarding/consent`) antes da família existir; o registro
+  em `consent_records` é persistido logo após a família ser criada (a tabela
+  exige `family_id`, que só existe a partir desse ponto).
+- Criação de família com escolha de tema azul/rosa (sem relação com gênero)
+  e exibição do código familiar gerado pelo servidor.
+- Cadastro da primeira criança (nome, apelido, nascimento, avatar de uma
+  lista fixa neutra quanto a gênero).
+- Início do responsável (`/guardian/home`) com dados reais: família, código
+  (com regeneração), responsáveis vinculados, convite de novo responsável
+  (com aviso claro quando o envio de e-mail está `not_configured`), lista de
+  crianças.
+- Detalhe da criança: definir/remover PIN, gerar código de pareamento para
+  aparelho sem PIN, listar e revogar aparelhos autorizados.
+- Acesso da criança (`/access/child`): código da família → seleção de
+  avatar/apelido → PIN ou código de pareamento → sessão vinculada.
+- Início da criança (`/child/home`): nome, avatar, aviso honesto de que
+  tarefas/KidsCoins/XP chegam nos próximos marcos (nada simulado); saída
+  atrás de uma barreira parental simples (pergunta de soma para adulto).
+- Guard único em `go_router`: `redirect` sempre lê `resolvedSessionProvider`
+  (backend) de forma síncrona, com `RouterRefreshNotifier` (via `ref.listen`)
+  reagindo a qualquer mudança de sessão — nenhuma rota abre um shell por
+  flag local.
+
+### Backend (Supabase)
+
+- Migrations (`supabase/migrations/202607311000{01..07}_*.sql`):
+  `plans` (seed free/premium), `profiles` (+ trigger em `auth.users`),
+  `families`, `family_members`, `family_invites`, `child_profiles`,
+  `child_device_bindings`, `consent_records`, `child_login_attempts`,
+  `device_pairing_codes`; RLS em todas; funções `create_family`,
+  `rotate_family_code`, `remove_guardian`, `create_child` (valida
+  `PLAN_CHILD_LIMIT`), `set_child_pin`, `revoke_child_device`,
+  `invite_guardian`, `cancel_guardian_invite`, `accept_guardian_invite`,
+  `create_device_pairing_code`, `resolve_family_children_by_code`,
+  `verify_child_pin`, rate limit (`check_child_login_rate_limit`,
+  `record_child_login_attempt`).
+- Privilégio mínimo: `revoke execute ... from public` seguido de `grant`
+  explícito por papel — funções internas (verificação de PIN, resolução de
+  código, rate limit) só são executáveis por `service_role`, nunca
+  diretamente por `authenticated`/`anon` via RPC.
+- Edge Functions (`supabase/functions/`): `authorize-child-device` e
+  `resolve-family-children` implementam o ADR 0001 (sessão anônima +
+  `child_device_bindings` + rate limit + erro genérico); `send-guardian-invite`
+  cria o convite via RPC e tenta enviar e-mail (bloqueio documentado abaixo).
+- `docs/adr/0001-autenticacao-infantil.md`: decisão registrada antes da
+  implementação, com alternativas rejeitadas.
+
+### CI
+
+- `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
+  por pacote e app, build de fumaça Android/Web/iOS, lint/teste do banco via
+  Supabase CLI, verificação de segredos. Ainda não executado em CI real.
 
 ## Marcos
 
 | Marco | Estado | Evidência |
 |---|---|---|
-| 0 — Fundação | **Concluído** | Ver seções acima; comandos de qualidade na tabela abaixo |
-| 1 — Autenticação e família | Não iniciado | — |
+| 0 — Fundação | **Concluído** | Ver `IMPLEMENTATION_STATUS.md` (histórico) |
+| 1 — Autenticação e família | **Concluído** | Ver seções acima; testes abaixo |
 | 2 — Rotina e tarefas | Não iniciado | — |
 | 3 — KidsCoins e recompensas | Não iniciado | — |
 | 4 — XP e progressão | Não iniciado | — |
-| 5 — Temas e idade | Não iniciado | — |
+| 5 — Temas e idade | Não iniciado | Catálogo de temas e assets já registrados em `design_system` (`kidsThemeCatalog`), aguardando telas/backend de seleção |
 | 6 — Notificações | Não iniciado | — |
 | 7 — Premium e painel | Não iniciado | — |
 | 8 — Privacidade e release | Não iniciado | — |
@@ -58,45 +97,44 @@
 
 | Comando | Escopo | Resultado |
 |---|---|---|
-| `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes (após reformatação inicial) |
-| `flutter analyze` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ "No issues found" em todos |
-| `flutter test` | domain (8 testes), data_access (2), design_system (6), apps/mobile (1), apps/admin_web (1) | ✅ 18/18 passando |
-| `flutter build apk --debug` | apps/mobile | ✅ `build/app/outputs/flutter-apk/app-debug.apk` gerado |
-| `flutter build web` | apps/admin_web | ✅ `build/web` gerado |
-| `flutter build ios --no-codesign` | apps/mobile | ⛔ Não executável localmente (Windows); validado apenas no job `build_smoke_ios` do CI (runner macOS) |
-| `supabase db lint --local` | supabase/ | ⛔ Bloqueado localmente: exige Docker (`ECONNREFUSED 127.0.0.1:54322`), ausente neste ambiente de desenvolvimento. Roda no CI (`supabase` job), onde Docker está disponível no runner `ubuntu-latest` |
-| `supabase test db` | supabase/ | ⛔ Mesmo bloqueio acima |
+| `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
+| `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
+| `flutter test` | domain (8), data_access (7), design_system (8), apps/mobile (1), apps/admin_web (1) | ✅ 25/25 passando |
+| `flutter build apk --debug` | apps/mobile | ✅ `build/app/outputs/flutter-apk/app-debug.apk` gerado (com ícone/splash reais) |
+| `flutter build web` | apps/admin_web | ✅ `build/web` gerado (Marco 0) |
+| `flutter build ios --no-codesign` | apps/mobile | ⛔ Não executável neste Windows; validado só no CI (runner macOS) |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations e pgTAP revisados manualmente, execução real pendente do CI |
+| `supabase functions serve` | Edge Functions | ⛔ Também exige Docker; as três funções foram revisadas manualmente linha a linha (sem checagem de tipos do Deno) |
 
 ## Bloqueios
 
-1. **Docker ausente no ambiente de desenvolvimento local** — impede rodar
-   `supabase start`/`db lint`/`test db` nesta máquina. Não bloqueia o CI
-   (runners `ubuntu-latest` do GitHub Actions incluem Docker). Ação: instalar
-   Docker Desktop localmente quando for necessário depurar migrations sem
-   depender só do CI.
-2. **Projetos Supabase por ambiente (dev/staging/prod) ainda não existem** —
-   `.env.example` documenta as chaves esperadas, mas nenhum valor real foi
-   criado (depende de conta/organização Supabase). Bloqueia apenas testes de
-   integração reais; não bloqueia migrations, RLS ou lógica de domínio.
-3. **Projeto(s) Firebase ainda não existem** — mesmo motivo; bloqueia push
-   real (Marco 6) e configuração de `google-services.json`/
-   `GoogleService-Info.plist`, não o Marco 0.
-4. **Contas de loja (App Store/Google Play) ainda não existem** — bloqueia
-   IDs de produto reais e testes de compra (Marco 7), documentado também em
+1. **Docker ausente localmente** — impede `supabase start`/`db lint`/
+   `test db`/`functions serve` nesta máquina. As migrations, políticas RLS,
+   funções SQL e Edge Functions foram revisadas manualmente com atenção a
+   nomes de coluna, tipos e assinaturas, mas **não foram executadas** contra
+   um Postgres real neste ciclo. Isso inclui o teste pgTAP novo
+   (`supabase/tests/database/10_marco1_family_auth_test.sql`), que só será
+   confirmado quando rodar em CI ou numa máquina com Docker.
+2. **Provedor de e-mail transacional não configurado** — `send-guardian-invite`
+   cria o convite normalmente e retorna `email_delivery: "not_configured"` com
+   o link para compartilhar manualmente. Documentado também em
    `docs/18_PENDENCIAS_NAO_BLOQUEANTES.md`.
-5. **CI ainda não rodou em GitHub Actions** — o workflow foi escrito e os
-   comandos equivalentes foram validados localmente onde possível, mas o
-   primeiro push/PR precisa confirmar o pipeline verde de ponta a ponta
-   (em especial os jobs `supabase` e `build_smoke_ios`, que dependem de
-   recursos indisponíveis localmente).
-
-Nenhum desses bloqueios impede o Marco 1; todos dependem de contas externas
-ou de infraestrutura de CI, conforme previsto em `CLAUDE.md` ("implemente a
-interface/adapter, documente o bloqueio e continue no que for independente").
+3. **Domínio do painel/app não decidido** — o link de convite usa
+   `https://app.kidstask.com.br/invite` como placeholder explícito
+   (`docs/18`, seção 5).
+4. **Projetos Supabase/Firebase/lojas por ambiente ainda não existem** — como
+   no Marco 0; bloqueia testes de integração reais, não a lógica implementada.
+5. **CI ainda não rodou em GitHub Actions** — pendente do primeiro push/PR.
 
 ## Próxima ação
 
-Marco 1 — Autenticação e Família: cadastro/login do responsável, consentimentos,
-criação de família, convite por e-mail/deep link, cadastro de criança, código
-familiar, PIN opcional, sessão anônima + `child_device_bindings` (implementando
-o ADR 0001), guards de perfil no `go_router` e RLS familiar completa.
+Marco 2 — Rotina e Tarefas: catálogo de ícones/tarefas, agendas (recorrente,
+data única, bônus, sem horário, com prazo), geração de ocorrências, limite
+gratuito de três por dia, tela "Hoje" real para a criança, conclusão
+automática/manual, rejeição/correção, atraso/expiração, Realtime, histórico —
+sobre a base de família/criança já criada no Marco 1.
+
+Antes de iniciar novas telas, recomenda-se validar este Marco 1 num ambiente
+com Docker (`supabase start`, `supabase db lint --local`, `supabase test db`)
+e, se possível, um projeto Supabase real de desenvolvimento, para confirmar
+que as migrations aplicam sem erro e o teste pgTAP passa de fato.
