@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FLUTTER_VERSION: '3.44.4'
+
+jobs:
+  quality:
+    name: Qualidade (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - packages/domain
+          - packages/data_access
+          - packages/design_system
+          - apps/mobile
+          - apps/admin_web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: flutter pub get
+        working-directory: ${{ matrix.package }}
+        run: flutter pub get
+
+      - name: dart format --set-exit-if-changed
+        working-directory: ${{ matrix.package }}
+        run: dart format --set-exit-if-changed .
+
+      - name: flutter analyze
+        working-directory: ${{ matrix.package }}
+        run: flutter analyze
+
+      - name: flutter test
+        working-directory: ${{ matrix.package }}
+        run: flutter test
+
+  build_smoke_android_web:
+    name: Build de fumaça (Android debug + Web)
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Build APK debug (apps/mobile)
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter build apk --debug
+
+      - name: Build Web (apps/admin_web)
+        working-directory: apps/admin_web
+        run: |
+          flutter pub get
+          flutter build web
+
+  build_smoke_ios:
+    name: Build de fumaça (iOS, sem assinatura)
+    runs-on: macos-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Build iOS debug sem codesign (apps/mobile)
+        working-directory: apps/mobile
+        run: |
+          flutter pub get
+          flutter build ios --no-codesign --debug
+
+  supabase:
+    name: Lint e testes do banco (Supabase)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # supabase start sobe Postgres local via Docker (pré-instalado nos
+      # runners ubuntu-latest) e aplica todas as migrations em supabase/migrations.
+      - name: Subir stack local e aplicar migrations
+        run: supabase start
+
+      - name: supabase db lint
+        run: supabase db lint --local --fail-on warning
+
+      - name: supabase test db (pgTAP)
+        run: supabase test db
+
+      - name: Parar stack local
+        if: always()
+        run: supabase stop
+
+  secret_scan:
+    name: Verificação de segredos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,11 @@
+{
+  "@@locale": "pt",
+  "appTitle": "Kid's Task",
+  "@appTitle": {
+    "description": "Nome do aplicativo exibido no splash e no título da janela/app."
+  },
+  "foundationPlaceholder": "Fundação do projeto em construção. O acesso de responsáveis e crianças chega no próximo marco.",
+  "@foundationPlaceholder": {
+    "description": "Texto temporário da tela inicial enquanto o Marco 1 (autenticação e família) ainda não existe."
+  }
+}

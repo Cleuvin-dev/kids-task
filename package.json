@@ -1,0 +1,21 @@
+{
+  "name": "kids-task",
+  "private": true,
+  "description": "Ferramentas de linha de comando do monorepo Kid's Task (Supabase CLI local).",
+  "scripts": {
+    "supabase": "supabase",
+    "db:lint": "supabase db lint",
+    "db:test": "supabase test db"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cleuvin-dev/kids-task.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Cleuvin-dev/kids-task/issues"
+  },
+  "homepage": "https://github.com/Cleuvin-dev/kids-task#readme",
+  "devDependencies": {
+    "supabase": "^2.111.0"
+  }
+}

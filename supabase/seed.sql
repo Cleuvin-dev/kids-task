@@ -1,0 +1,7 @@
+-- Dados de referência aplicados após as migrations em ambiente local/homologação.
+--
+-- Vazio no Marco 0 (Fundação): ainda não existe schema de domínio. A partir
+-- do Marco 1 este arquivo passa a popular tabelas somente-leitura como
+-- `plans`, `level_definitions` e `task_templates`
+-- (docs/17_BANCO_INICIAL_DE_TAREFAS.md, seção 7). Nunca inserir dados de
+-- família, criança ou credencial real aqui.

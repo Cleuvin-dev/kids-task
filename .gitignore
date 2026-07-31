@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+env/*.json
 
 # Dart / Flutter
 **/.dart_tool/
@@ -13,8 +14,12 @@
 **/.flutter-plugins-dependencies
 **/.metadata
 
+# Localização gerada por flutter gen-l10n (regenerada em `flutter pub get`)
+**/lib/l10n/app_localizations*.dart
+
 # Android
 **/android/.gradle
+**/android/.kotlin
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
 **/android/key.properties
