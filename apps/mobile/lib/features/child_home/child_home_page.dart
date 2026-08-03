@@ -139,9 +139,18 @@ class _ChildHomePageState extends ConsumerState<ChildHomePage> {
           children: [
             Align(
               alignment: Alignment.topRight,
-              child: IconButton(
-                onPressed: _requestExit,
-                icon: const Icon(Icons.logout),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: () => context.push('/child/notifications'),
+                    icon: const Icon(Icons.notifications_outlined),
+                  ),
+                  IconButton(
+                    onPressed: _requestExit,
+                    icon: const Icon(Icons.logout),
+                  ),
+                ],
               ),
             ),
             Center(

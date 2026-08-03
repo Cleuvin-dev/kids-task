@@ -190,6 +190,11 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
       appBar: AppBar(
         title: const Text('Início'),
         actions: [
+          IconButton(
+            onPressed: () => context.push('/guardian/notifications'),
+            icon: const Icon(Icons.notifications_outlined),
+            tooltip: 'Notificações',
+          ),
           IconButton(onPressed: _signOut, icon: const Icon(Icons.logout)),
         ],
       ),

@@ -7,6 +7,7 @@ import 'child_access/child_access_repository.dart';
 import 'client/kids_task_supabase.dart';
 import 'family/child_repository.dart';
 import 'family/family_repository.dart';
+import 'notifications/notification_repository.dart';
 import 'rewards/redemption_repository.dart';
 import 'rewards/reward_repository.dart';
 import 'tasks/occurrence_repository.dart';
@@ -73,6 +74,10 @@ final progressRepositoryProvider = Provider<ProgressRepository>(
 
 final themeRepositoryProvider = Provider<ThemeRepository>(
   (ref) => ThemeRepository(ref.watch(supabaseClientProvider)),
+);
+
+final notificationRepositoryProvider = Provider<NotificationRepository>(
+  (ref) => NotificationRepository(ref.watch(supabaseClientProvider)),
 );
 
 /// Tema do responsável, resolvido a partir de `families.guardian_theme`

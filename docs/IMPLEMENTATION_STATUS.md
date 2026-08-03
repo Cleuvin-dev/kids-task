@@ -5,9 +5,10 @@
 **Estado atual:** Marco 0 — Fundação concluído. Marco 1 — Autenticação e
 Família concluído. Marco 2 — Rotina e Tarefas concluído. Marco 3 —
 KidsCoins e Recompensas concluído. Marco 4 — XP e Progressão concluído.
-Marco 5 — Temas e Experiência por Idade concluído (com bloqueios de
-infraestrutura documentados abaixo — nada foi executado contra um
-Postgres real neste ciclo). Este documento e o `git log` são a fonte de
+Marco 5 — Temas e Experiência por Idade concluído. Marco 6 — Notificações
+concluído **parcialmente** (central interna funciona de ponta a ponta;
+push de verdade via FCM/APNs está bloqueado por falta de projeto Firebase
+real — ver "Bloqueios"). Este documento e o `git log` são a fonte de
 verdade do que já existe; ler esta seção e a "Próxima ação" antes de
 continuar.
 
@@ -118,6 +119,13 @@ ponta a ponta:
     (catálogo publicado, cadeado nos temas Premium quando a família é
     free, "Solicitar um tema" para o formulário de docs/06 seção 10).
   - Nenhuma rota nova mexeu no `redirect` síncrono do router.
+- **Marco 6** — central interna de notificações (`/guardian/notifications`
+  e `/child/notifications`, mesma tela `NotificationCenterPage` para os
+  dois perfis — a RLS de `notifications` já resolve "de quem" é cada
+  notificação), ícone de sino na home do responsável e da criança.
+  Registro/preferência de push (`register_device_token` etc.) não tem
+  tela ainda — sem SDK de push instalado, não há token real para
+  registrar (bloqueio abaixo).
 
 ### Backend (Supabase)
 
@@ -251,6 +259,53 @@ ponta a ponta:
   Premium liberado após upgrade de plano, isolamento entre famílias
   (inclusive `FORBIDDEN` ao tentar mudar tema de criança de outra
   família), solicitação de tema exige consentimento, e privilégio mínimo.
+- **Marco 6** — migrations (`supabase/migrations/202607311000{28..31}_*.sql`):
+  `device_tokens`, `notification_preferences` (guardião administra, inclusive
+  para as crianças — mesmo espírito de docs/06 "visível, mas não alterável
+  pela criança" — enforcement de preferência fica para quando existir um
+  worker de envio de verdade, este marco só guarda a preferência),
+  `notifications` (central interna, é o que a tela consome), `outbox_events`
+  (fila para um futuro worker de push, sem nenhuma policy de RLS — só
+  `service_role`, mesmo padrão de `family_invites` do Marco 1). Funções
+  `register_device_token`/`deactivate_device_token`/`mark_notification_read`
+  (expostas a `authenticated`) e `emit_notification` (interna, grava a
+  notificação e o evento de outbox atomicamente com a mesma
+  `idempotency_key`, sem grant a nenhum papel de cliente).
+  `complete_task_occurrence`, `review_task_occurrence` (Marco 2/4),
+  `request_redemption`, `review_redemption` (Marco 3), `process_level_changes`,
+  `grant_birthday_bonus` (Marco 4) foram **redefinidas** (novo
+  `create or replace function` — as migrations originais não foram
+  editadas) para chamar `emit_notification` nos pontos mais centrais do
+  dia a dia: tarefa enviada (notifica os dois responsáveis)/aprovada/
+  rejeitada, resgate solicitado (notifica os dois responsáveis)/aprovado,
+  subida de nível, bônus de aniversário — reaproveitando as mesmas chaves
+  de idempotência de docs/11 seção 8 (`level_up:<child_id>:<level>`,
+  `birthday:<child_id>:<year>`) quando já existiam.
+- **Bloqueio novo, o mais importante deste marco**: push de verdade
+  (FCM/APNs) não pode ser enviado nem testado — não existe projeto
+  Firebase real (mesma raiz do bloqueio 5 já existente: nenhum projeto
+  externo foi provisionado ainda). Por isso este marco **não** adiciona
+  `firebase_messaging` nem nenhum SDK nativo ao `pubspec.yaml` — só o
+  necessário para funcionar sem ele: a central interna (tabela
+  `notifications`, que já funciona sozinha) e a fila `outbox_events` (que
+  um worker futuro consumiria quando o projeto Firebase existir).
+- **Escopo não coberto nesta passada** (registrado, não esquecido): eventos
+  de "tarefa próxima"/"tarefa atrasada" (dependem de um job de varredura
+  periódica que ainda não existe — `expire_due_task_occurrences` já roda a
+  cada 5 minutos, mas não emite notificação, só muda o estado);
+  `mark_redemption_delivered`/`cancel_approved_redemption` (Marco 3),
+  `skip_task_occurrence` (Marco 2) não emitem notificação ainda; eventos do
+  Marco 1 (convite aceito, novo aparelho infantil — este último vive na
+  Edge Function `authorize-child-device`, TypeScript, não SQL) não foram
+  tocados; tela de preferências (`notification_preferences`) não tem UI
+  ainda, só schema+RLS.
+- pgTAP: `supabase/tests/database/60_marco6_notifications_test.sql`
+  (26 asserções) cobrindo notificar os dois responsáveis ao enviar
+  tarefa/solicitar resgate, notificar a criança ao aprovar/rejeitar tarefa
+  e ao aprovar resgate, reprocessar aprovação não duplica notificação,
+  subida de nível notifica, registro de token é idempotente (mesmo token
+  não duplica linha), marcar como lida (e bloqueio de papel errado),
+  isolamento RLS entre famílias e privilégio mínimo.
 
 ### CI
 
@@ -268,7 +323,7 @@ ponta a ponta:
 | 3 — KidsCoins e recompensas | **Concluído** | Ver seções acima; testes abaixo. Taxa de conversão simbólica KidsCoin→BRL (docs/05 seção 6) **não implementada** — valor sugerido ainda é pendência não bloqueante (docs/18) |
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
-| 6 — Notificações | Não iniciado | — |
+| 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
 | 7 — Premium e painel | Não iniciado | — |
 | 8 — Privacidade e release | Não iniciado | — |
 
@@ -278,17 +333,17 @@ ponta a ponta:
 |---|---|---|
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (26), data_access (9), design_system (10), apps/mobile (5), apps/admin_web (1) | ✅ 51/51 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations, funções SQL e os pgTAP dos Marcos 2-5 (129 asserções ao todo) revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (26), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (1) | ✅ 52/52 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations, funções SQL e os pgTAP dos Marcos 2-6 (155 asserções ao todo) revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
 
 1. **Docker ausente localmente** — impede `supabase start`/`db lint`/
    `test db`/`functions serve` nesta máquina. As migrations, políticas RLS
-   e funções SQL dos Marcos 2-5 foram revisadas manualmente com atenção a
+   e funções SQL dos Marcos 2-6 foram revisadas manualmente com atenção a
    nomes de coluna, tipos e assinaturas, mas **não foram executadas** contra
-   um Postgres real. Isso inclui os quatro pgTAP novos, que só serão
+   um Postgres real. Isso inclui os cinco pgTAP novos, que só serão
    confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` assume que a extensão está
@@ -303,6 +358,10 @@ ponta a ponta:
    (`docs/18`, seção 5).
 5. **Projetos Supabase/Firebase/lojas por ambiente ainda não existem** — como
    no Marco 0; bloqueia testes de integração reais, não a lógica implementada.
+   No Marco 6 isso significa especificamente: sem projeto Firebase, não há
+   como registrar `firebase_messaging` no app nem enviar push de verdade
+   (FCM/APNs) — a central interna de notificações funciona independente
+   disso, mas a fila `outbox_events` fica sem nenhum worker consumindo.
 6. **CI ainda não rodou em GitHub Actions** — pendente do primeiro push/PR.
 
 ## Build de verificação manual (release APK)
@@ -333,26 +392,23 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 6 — Notificações**: `device_tokens` (FCM Android/APNs iOS,
-vinculados a `auth_user_id`/`child_binding_id`, docs/09 seção 7),
-`notification_preferences` (por destinatário/tipo de evento, minutos de
-antecedência, quiet hours), `notifications` + `outbox_events` (fila
-idempotente de envio), matriz de eventos já listada em docs/14 seção 9
-(`task.occurrence_due_soon`, `task.occurrence_submitted`,
-`task.occurrence_approved`, `redemption.requested`, `progress.level_up`
-etc. — vários desses eventos já acontecem de fato desde os Marcos 2-4,
-só falta emitir e entregar a notificação). Regras de segurança infantil já
-valem desde o CLAUDE.md: push nunca carrega nome completo, data de
-nascimento ou outro dado sensível.
+**Marco 7 — Premium e Painel**: compras via loja (`get_store_products` no
+cliente, `verify_purchase`/`handle_apple_notification`/
+`handle_google_notification`/`restore_entitlements`/
+`apply_subscription_transition`/`apply_safe_downgrade`, docs/14 seção 7),
+tabelas `subscriptions`/`subscription_events` (docs/09 seção 6); painel
+administrativo Web (`apps/admin_web`, hoje só um scaffold do Marco 0) com
+MFA e gestão de família/usuário — inclusive a publicação real dos temas
+`draft` do Marco 5 e do catálogo de recompensas/templates, que hoje só
+avança por migration.
 
-Pendências técnicas ainda não decididas (docs/18): provedor de e-mail
-transacional, hospedagem do painel admin, ferramenta de feature flag,
-crash reporting — nenhuma bloqueia o Marco 6 em si, mas o provedor de
-push (Firebase Cloud Messaging é o candidato natural, já citado em
-docs/09) precisa de um projeto Firebase real, que ainda não existe
-(bloqueio 5 abaixo).
+Pendências técnicas ainda não decididas que bloqueiam parte deste marco
+(docs/18): contas de desenvolvedor Apple/Google Play, IDs de produto de
+assinatura, domínio/hospedagem do painel Web — nenhuma delas impede
+desenhar o modelo de dados e as funções de webhook, mas testar a compra de
+verdade depende de contas de loja reais que ainda não existem.
 
-Antes de iniciar, recomenda-se validar os Marcos 1-5 num ambiente com
+Antes de iniciar, recomenda-se validar os Marcos 1-6 num ambiente com
 Docker (`supabase start`, `supabase db lint --local`, `supabase test db`) e,
 se possível, um projeto Supabase real de desenvolvimento — nenhuma migration
 ou função SQL destes marcos foi executada contra um Postgres de verdade

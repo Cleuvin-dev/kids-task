@@ -20,6 +20,7 @@ import '../features/guardian_tasks/guardian_task_list_page.dart';
 import '../features/guardian_tasks/pending_approvals_page.dart';
 import '../features/guardian_tasks/task_form_page.dart';
 import '../features/guardian_tasks/task_template_picker_page.dart';
+import '../features/notifications/notification_center_page.dart';
 import '../features/onboarding/consent_page.dart';
 import '../features/onboarding/create_child_page.dart';
 import '../features/onboarding/create_family_page.dart';
@@ -187,6 +188,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 PendingRedemptionsPage(familyId: _currentFamilyId(ref)!),
           ),
           GoRoute(
+            path: '/guardian/notifications',
+            builder: (context, state) => const NotificationCenterPage(),
+          ),
+          GoRoute(
             path: '/guardian/theme-requests/new',
             builder: (context, state) {
               final extra = state.extra as Map<String, dynamic>?;
@@ -211,6 +216,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/child/rewards',
             builder: (context, state) =>
                 ChildRewardsPage(childId: _currentChildId(ref)!),
+          ),
+          GoRoute(
+            path: '/child/notifications',
+            builder: (context, state) => const NotificationCenterPage(),
           ),
         ],
       ),
