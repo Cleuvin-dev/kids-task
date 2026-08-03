@@ -20,4 +20,5 @@ export 'src/tasks/progress_repository.dart';
 export 'src/tasks/task_repository.dart';
 export 'src/tasks/task_template_repository.dart';
 export 'src/tasks/wallet_repository.dart';
+export 'src/themes/theme_repository.dart';
 export 'src/util/idempotency.dart';

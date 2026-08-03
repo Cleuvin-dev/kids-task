@@ -146,6 +146,23 @@ class FamilyRepository {
     }
   }
 
+  /// `theme` é `'blue'` ou `'pink'` (docs/06 seção 1). Escrita simples via
+  /// RLS — sem regra de negócio além de autorização (a policy
+  /// `families_update_guardian` já cobre isso desde o Marco 1).
+  Future<void> updateGuardianTheme({
+    required String familyId,
+    required String theme,
+  }) async {
+    try {
+      await _client
+          .from('families')
+          .update({'guardian_theme': theme})
+          .eq('id', familyId);
+    } catch (error) {
+      throw mapSupabaseError(error);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> listFamilyMembers(String familyId) async {
     try {
       final rows = await _client

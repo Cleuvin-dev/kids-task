@@ -4,11 +4,12 @@
 
 **Estado atual:** Marco 0 — Fundação concluído. Marco 1 — Autenticação e
 Família concluído. Marco 2 — Rotina e Tarefas concluído. Marco 3 —
-KidsCoins e Recompensas concluído. Marco 4 — XP e Progressão concluído
-(com bloqueios de infraestrutura documentados abaixo — nada foi executado
-contra um Postgres real neste ciclo). Este documento e o `git log` são a
-fonte de verdade do que já existe; ler esta seção e a "Próxima ação" antes
-de continuar.
+KidsCoins e Recompensas concluído. Marco 4 — XP e Progressão concluído.
+Marco 5 — Temas e Experiência por Idade concluído (com bloqueios de
+infraestrutura documentados abaixo — nada foi executado contra um
+Postgres real neste ciclo). Este documento e o `git log` são a fonte de
+verdade do que já existe; ler esta seção e a "Próxima ação" antes de
+continuar.
 
 ## Repositório
 
@@ -96,6 +97,27 @@ ponta a ponta:
     regra de negócio crítica nesses campos, não precisa de função).
   - Sem tela de desbloqueios de cosméticos — adiado para o Marco 5 junto
     do catálogo de temas.
+- **Marco 5** — temas de verdade (o app inteiro rodava só no tema azul do
+  responsável antes deste marco, inclusive nas telas da criança — a
+  aplicação dinâmica de tema nunca tinha sido ligada):
+  - `router.dart` ganhou dois `ShellRoute`: um envolvendo todas as rotas
+    `/guardian/*` que aplica `buildGuardianTheme` a partir de
+    `families.guardian_theme` (`familyGuardianThemeProvider`), outro
+    envolvendo `/child/*` que aplica `buildKidsThemeBySlug` a partir de
+    `child_profiles.theme_slug` (`childThemeSlugProvider`) — cada um só
+    um `Theme(...)` sobre o `child` do Shell, sem tocar no `redirect`
+    síncrono nem duplicar rotas.
+  - `packages/design_system`: `buildBlockWorldTheme`/
+    `buildSpaceAdventureTheme`/`buildCastlesQuestTheme` (cores/geometria
+    originais, sem nenhum asset de terceiros — docs/06 seção 4) e
+    `buildKidsThemeBySlug(slug)`, que cai no Tema Infantil Padrão para
+    qualquer slug desconhecido ou ainda sem build (docs/06 seção 6:
+    "asset ausente nunca pode quebrar uma tela").
+  - Responsável: card "Tema do app" na home (trocar azul/rosa,
+    `families.guardian_theme` via RLS) e tela `/guardian/children/:childId/theme`
+    (catálogo publicado, cadeado nos temas Premium quando a família é
+    free, "Solicitar um tema" para o formulário de docs/06 seção 10).
+  - Nenhuma rota nova mexeu no `redirect` síncrono do router.
 
 ### Backend (Supabase)
 
@@ -199,6 +221,36 @@ ponta a ponta:
   (`at_least_one`, `percentage`), dia neutro com tarefa dispensada, streak
   quebrando com tarefa obrigatória não cumprida, isolamento RLS e
   privilégio mínimo.
+- **Marco 5** — migrations (`supabase/migrations/202607311000{25..27}_*.sql`):
+  `themes` (catálogo publicado de verdade, substituindo a lista estática
+  que só existia em `packages/design_system` — só entram como `published`
+  os slugs que já têm build real: `kids_default`, `block_world`,
+  `space_adventure`, `castles_quest`; os outros cinco do catálogo
+  pretendido do docs/06 seção 3 ficam `draft`, invisíveis ao cliente via
+  RLS, até ganharem arte própria — publicar depois não muda navegação);
+  `child_profiles.theme_slug` ganhou FK para `themes.slug` (a coluna já
+  existia sem FK desde o Marco 1, "chega no Marco 5" — migration nova, a
+  original não foi editada); `theme_requests` (formulário de docs/06
+  seção 10, nunca coleta foto). Funções `apply_child_theme` (valida
+  família, papel, tema publicado e entitlement do plano — `THEME_NOT_ENTITLED`
+  quando a família não é Premium) e `submit_theme_request` (consentimento
+  obrigatório), ambas expostas a `authenticated`.
+- **Simplificação registrada**: sem `theme_assets` (docs/09 seção 6) —
+  o catálogo guarda só uma referência (`manifest_json.background_asset_key`)
+  resolvida contra os assets já processados em `packages/design_system`;
+  não existe pipeline de densidade/CDN para justificar uma tabela própria
+  ainda. Desbloqueios de cosméticos (`cosmetic_items`/`child_unlocks`,
+  adiados do Marco 4) **continuam não implementados** — o catálogo de
+  temas agora é real, mas nenhum cosmético além do tema em si (avatar,
+  moldura, medalha) tem conteúdo definido; fica como item de backlog sem
+  marco designado, não algo esquecido.
+- pgTAP: `supabase/tests/database/50_marco5_themes_test.sql`
+  (17 asserções) cobrindo catálogo só mostra temas publicados, aplicar
+  tema gratuito, bloqueio de tema Premium em plano gratuito
+  (`THEME_NOT_ENTITLED`), tema não publicado/inexistente rejeitado, tema
+  Premium liberado após upgrade de plano, isolamento entre famílias
+  (inclusive `FORBIDDEN` ao tentar mudar tema de criança de outra
+  família), solicitação de tema exige consentimento, e privilégio mínimo.
 
 ### CI
 
@@ -215,7 +267,7 @@ ponta a ponta:
 | 2 — Rotina e tarefas | **Concluído** | Ver seções acima; testes abaixo |
 | 3 — KidsCoins e recompensas | **Concluído** | Ver seções acima; testes abaixo. Taxa de conversão simbólica KidsCoin→BRL (docs/05 seção 6) **não implementada** — valor sugerido ainda é pendência não bloqueante (docs/18) |
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
-| 5 — Temas e idade | Não iniciado | Catálogo de temas e assets já registrados em `design_system` (`kidsThemeCatalog`), aguardando telas/backend de seleção; também herda os desbloqueios de cosméticos adiados do Marco 4 |
+| 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | Não iniciado | — |
 | 7 — Premium e painel | Não iniciado | — |
 | 8 — Privacidade e release | Não iniciado | — |
@@ -226,17 +278,17 @@ ponta a ponta:
 |---|---|---|
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (26), data_access (9), design_system (8), apps/mobile (5), apps/admin_web (1) | ✅ 49/49 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations, funções SQL e os pgTAP dos Marcos 2-4 (112 asserções ao todo) revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (26), data_access (9), design_system (10), apps/mobile (5), apps/admin_web (1) | ✅ 51/51 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations, funções SQL e os pgTAP dos Marcos 2-5 (129 asserções ao todo) revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
 
 1. **Docker ausente localmente** — impede `supabase start`/`db lint`/
    `test db`/`functions serve` nesta máquina. As migrations, políticas RLS
-   e funções SQL dos Marcos 2-4 foram revisadas manualmente com atenção a
+   e funções SQL dos Marcos 2-5 foram revisadas manualmente com atenção a
    nomes de coluna, tipos e assinaturas, mas **não foram executadas** contra
-   um Postgres real. Isso inclui os três pgTAP novos, que só serão
+   um Postgres real. Isso inclui os quatro pgTAP novos, que só serão
    confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` assume que a extensão está
@@ -281,18 +333,26 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 5 — Temas e Experiência por Idade**: catálogo de temas publicados
-(`themes`/`theme_assets`, docs/09 seção 6 — hoje só existe
-`kidsThemeCatalog` estático em `packages/design_system`, sem tabela nem
-publicação/versão real), `list_available_themes`/`apply_child_theme`
-(valida família, papel, estado publicado, entitlement do plano e nível —
-o nível já é calculado desde o Marco 4), fallback para asset ausente,
-downgrade de Premium trocando tema sem quebrar a tela (docs/15 seção 10).
-Este marco também é o momento natural de implementar `cosmetic_items`/
-`child_unlocks` (adiados do Marco 4 — docs/05 seção 10): sem um catálogo
-de temas real, não havia o que desbloquear ainda.
+**Marco 6 — Notificações**: `device_tokens` (FCM Android/APNs iOS,
+vinculados a `auth_user_id`/`child_binding_id`, docs/09 seção 7),
+`notification_preferences` (por destinatário/tipo de evento, minutos de
+antecedência, quiet hours), `notifications` + `outbox_events` (fila
+idempotente de envio), matriz de eventos já listada em docs/14 seção 9
+(`task.occurrence_due_soon`, `task.occurrence_submitted`,
+`task.occurrence_approved`, `redemption.requested`, `progress.level_up`
+etc. — vários desses eventos já acontecem de fato desde os Marcos 2-4,
+só falta emitir e entregar a notificação). Regras de segurança infantil já
+valem desde o CLAUDE.md: push nunca carrega nome completo, data de
+nascimento ou outro dado sensível.
 
-Antes de iniciar, recomenda-se validar os Marcos 1-4 num ambiente com
+Pendências técnicas ainda não decididas (docs/18): provedor de e-mail
+transacional, hospedagem do painel admin, ferramenta de feature flag,
+crash reporting — nenhuma bloqueia o Marco 6 em si, mas o provedor de
+push (Firebase Cloud Messaging é o candidato natural, já citado em
+docs/09) precisa de um projeto Firebase real, que ainda não existe
+(bloqueio 5 abaixo).
+
+Antes de iniciar, recomenda-se validar os Marcos 1-5 num ambiente com
 Docker (`supabase start`, `supabase db lint --local`, `supabase test db`) e,
 se possível, um projeto Supabase real de desenvolvimento — nenhuma migration
 ou função SQL destes marcos foi executada contra um Postgres de verdade

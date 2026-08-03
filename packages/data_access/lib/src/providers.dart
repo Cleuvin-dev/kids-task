@@ -14,6 +14,7 @@ import 'tasks/progress_repository.dart';
 import 'tasks/task_repository.dart';
 import 'tasks/task_template_repository.dart';
 import 'tasks/wallet_repository.dart';
+import 'themes/theme_repository.dart';
 
 /// Providers de infraestrutura compartilhados pelos dois apps Flutter. Só
 /// devem ser lidos depois de `KidsTaskSupabase.initialize(...)` em `main()`.
@@ -69,6 +70,36 @@ final redemptionRepositoryProvider = Provider<RedemptionRepository>(
 final progressRepositoryProvider = Provider<ProgressRepository>(
   (ref) => ProgressRepository(ref.watch(supabaseClientProvider)),
 );
+
+final themeRepositoryProvider = Provider<ThemeRepository>(
+  (ref) => ThemeRepository(ref.watch(supabaseClientProvider)),
+);
+
+/// Tema do responsável, resolvido a partir de `families.guardian_theme`
+/// (docs/06 seção 1). Cai em [GuardianThemeOption.blue] se ainda não
+/// carregou ou se o valor for desconhecido — nunca quebra a tela.
+final familyGuardianThemeProvider = FutureProvider.family<String, String>((
+  ref,
+  familyId,
+) async {
+  final family = await ref.read(familyRepositoryProvider).fetchFamily(familyId);
+  return family?['guardian_theme'] as String? ?? 'blue';
+});
+
+/// Slug do tema da criança, resolvido a partir de
+/// `child_profiles.theme_slug` (docs/06 seção 2).
+final childThemeSlugProvider = FutureProvider.family<String, String>((
+  ref,
+  childId,
+) async {
+  final child = await ref
+      .read(supabaseClientProvider)
+      .from('child_profiles')
+      .select('theme_slug')
+      .eq('id', childId)
+      .single();
+  return child['theme_slug'] as String? ?? 'kids_default';
+});
 
 /// Emite a cada mudança de estado de autenticação do Supabase (login,
 /// logout, refresh, sessão anônima criada).

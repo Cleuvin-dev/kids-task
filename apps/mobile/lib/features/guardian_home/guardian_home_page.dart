@@ -130,6 +130,54 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
     context.push('/onboarding/child', extra: {'familyId': widget.familyId});
   }
 
+  Future<void> _changeAppTheme() async {
+    final current = _family?['guardian_theme'] as String? ?? 'blue';
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Tema do app'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop('blue'),
+            child: Row(
+              children: [
+                if (current == 'blue') const Icon(Icons.check, size: 18),
+                if (current == 'blue') const SizedBox(width: 8),
+                const Text('Azul'),
+              ],
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop('pink'),
+            child: Row(
+              children: [
+                if (current == 'pink') const Icon(Icons.check, size: 18),
+                if (current == 'pink') const SizedBox(width: 8),
+                const Text('Rosa'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (selected == null || selected == current) return;
+    try {
+      await ref
+          .read(familyRepositoryProvider)
+          .updateGuardianTheme(familyId: widget.familyId, theme: selected);
+      ref.invalidate(familyGuardianThemeProvider(widget.familyId));
+      await _load();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível trocar o tema agora.'),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _signOut() async {
     await ref.read(guardianAuthRepositoryProvider).signOut();
     ref.invalidate(resolvedSessionProvider);
@@ -159,6 +207,8 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
                   _buildApprovalsCard(),
                   const SizedBox(height: 16),
                   _buildRewardsCard(),
+                  const SizedBox(height: 16),
+                  _buildThemeCard(),
                   const SizedBox(height: 16),
                   _buildFamilyCodeCard(),
                   const SizedBox(height: 16),
@@ -213,6 +263,21 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
         subtitle: const Text('Catálogo e resgates das crianças'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push('/guardian/rewards'),
+      ),
+    );
+  }
+
+  Widget _buildThemeCard() {
+    final current = _family?['guardian_theme'] as String? ?? 'blue';
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.palette_outlined),
+        title: const Text('Tema do app'),
+        subtitle: Text(current == 'pink' ? 'Rosa' : 'Azul'),
+        trailing: TextButton(
+          onPressed: _changeAppTheme,
+          child: const Text('Trocar'),
+        ),
       ),
     );
   }

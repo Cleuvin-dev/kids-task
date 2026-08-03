@@ -2,6 +2,7 @@ import 'package:data_access/data_access.dart';
 import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/async_error_banner.dart';
 
@@ -374,6 +375,18 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
                     trailing: TextButton(
                       onPressed: _adjustCoins,
                       child: const Text('Ajustar'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.palette_outlined),
+                    title: const Text('Tema'),
+                    subtitle: const Text('Personalização visual da criança'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push(
+                      '/guardian/children/${widget.childId}/theme',
                     ),
                   ),
                 ),
