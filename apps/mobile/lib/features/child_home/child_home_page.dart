@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// Início real da criança: nome, avatar e um aviso honesto de que tarefas,
-/// KidsCoins e XP chegam nos próximos marcos — nada simulado
-/// (CLAUDE.md: "Não construa telas falsas desconectadas do backend").
+import 'child_today_section.dart';
+
+/// Início real da criança: nome, avatar e a tela "Hoje" com as tarefas do
+/// dia (docs/04). KidsCoins/XP acumulados e recompensas chegam nos
+/// próximos marcos.
 class ChildHomePage extends ConsumerStatefulWidget {
   const ChildHomePage({super.key, required this.childId});
 
@@ -21,6 +23,7 @@ class ChildHomePage extends ConsumerStatefulWidget {
 class _ChildHomePageState extends ConsumerState<ChildHomePage> {
   bool _loading = true;
   Map<String, dynamic>? _child;
+  int _coinBalance = 0;
 
   @override
   void initState() {
@@ -36,7 +39,13 @@ class _ChildHomePageState extends ConsumerState<ChildHomePage> {
           .select('first_name, nickname, avatar_id')
           .eq('id', widget.childId)
           .single();
-      setState(() => _child = child);
+      final wallet = await ref
+          .read(walletRepositoryProvider)
+          .fetchWallet(widget.childId);
+      setState(() {
+        _child = child;
+        _coinBalance = wallet?['coin_balance'] as int? ?? 0;
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -96,36 +105,48 @@ class _ChildHomePageState extends ConsumerState<ChildHomePage> {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: ListView(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  onPressed: _requestExit,
-                  icon: const Icon(Icons.logout),
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: IconButton(
+                onPressed: _requestExit,
+                icon: const Icon(Icons.logout),
+              ),
+            ),
+            Center(
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: avatar.color,
+                    child: Icon(avatar.icon, size: 40, color: Colors.white),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Oi, $name!',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.savings_outlined),
+                title: Text('$_coinBalance KidsCoins'),
+                trailing: FilledButton.tonal(
+                  onPressed: () => context.push('/child/rewards'),
+                  child: const Text('Recompensas'),
                 ),
               ),
-              const Spacer(),
-              CircleAvatar(
-                radius: 48,
-                backgroundColor: avatar.color,
-                child: Icon(avatar.icon, size: 48, color: Colors.white),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Oi, $name!',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Suas tarefas, KidsCoins e recompensas vão aparecer aqui em breve.',
-                textAlign: TextAlign.center,
-              ),
-              const Spacer(),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+            Text('Hoje', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            ChildTodaySection(childId: widget.childId),
+          ],
         ),
       ),
     );

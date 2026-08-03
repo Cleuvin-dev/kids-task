@@ -193,7 +193,7 @@ Informe:
 - próximo marco recomendado;
 - status atualizado da documentação.
 
-Comece agora pela leitura e auditoria do repositório; em seguida, implemente o Marco 0 ou continue do primeiro marco incompleto identificado.
+Comece agora pela leitura e auditoria do repositório, não implemente nada ainda, aguarde minhas instruções.
 
 ---
 

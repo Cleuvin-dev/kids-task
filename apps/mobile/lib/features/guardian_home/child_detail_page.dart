@@ -1,4 +1,5 @@
 import 'package:data_access/data_access.dart';
+import 'package:domain/domain.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,6 +19,7 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
   bool _loading = true;
   String? _errorMessage;
   List<Map<String, dynamic>> _devices = const [];
+  int _coinBalance = 0;
 
   @override
   void initState() {
@@ -31,7 +33,13 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
       final devices = await ref
           .read(childRepositoryProvider)
           .listDeviceBindings(widget.childId);
-      setState(() => _devices = devices);
+      final wallet = await ref
+          .read(walletRepositoryProvider)
+          .fetchWallet(widget.childId);
+      setState(() {
+        _devices = devices;
+        _coinBalance = wallet?['coin_balance'] as int? ?? 0;
+      });
     } catch (_) {
       setState(
         () => _errorMessage = 'Não foi possível carregar os aparelhos agora.',
@@ -140,6 +148,90 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
     }
   }
 
+  Future<void> _adjustCoins() async {
+    final amountController = TextEditingController();
+    final reasonController = TextEditingController();
+    var direction = 'credit';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Ajustar KidsCoins'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'credit', label: Text('Adicionar')),
+                  ButtonSegment(value: 'debit', label: Text('Retirar')),
+                ],
+                selected: {direction},
+                onSelectionChanged: (selection) =>
+                    setDialogState(() => direction = selection.first),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Quantidade'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                decoration: const InputDecoration(labelText: 'Motivo'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Confirmar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    final amount = int.tryParse(amountController.text);
+    if (amount == null || amount <= 0 || reasonController.text.trim().isEmpty) {
+      _showError('Informe uma quantidade e um motivo válidos.');
+      return;
+    }
+
+    try {
+      await ref
+          .read(walletRepositoryProvider)
+          .adjustCoins(
+            childId: widget.childId,
+            amount: amount,
+            direction: direction,
+            reason: reasonController.text.trim(),
+            idempotencyKey: newIdempotencyKey(),
+          );
+      await _load();
+    } on DomainFailure catch (e) {
+      _showError(
+        e.code == DomainErrorCode.insufficientCoins
+            ? 'Saldo insuficiente para essa retirada.'
+            : 'Não foi possível ajustar o saldo agora.',
+      );
+    } catch (_) {
+      _showError('Não foi possível ajustar o saldo agora.');
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,6 +243,17 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
               children: [
                 if (_errorMessage != null)
                   AsyncErrorBanner(message: _errorMessage!),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.savings_outlined),
+                    title: Text('$_coinBalance KidsCoins'),
+                    trailing: TextButton(
+                      onPressed: _adjustCoins,
+                      child: const Text('Ajustar'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Card(
                   child: Column(
                     children: [

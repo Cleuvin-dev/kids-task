@@ -156,6 +156,10 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
                     AsyncErrorBanner(message: _errorMessage!),
                   _buildHeaderBanner(),
                   const SizedBox(height: 16),
+                  _buildApprovalsCard(),
+                  const SizedBox(height: 16),
+                  _buildRewardsCard(),
+                  const SizedBox(height: 16),
                   _buildFamilyCodeCard(),
                   const SizedBox(height: 16),
                   _buildMembersSection(),
@@ -185,6 +189,30 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
             context,
           ).textTheme.headlineSmall?.copyWith(color: Colors.white),
         ),
+      ),
+    );
+  }
+
+  Widget _buildApprovalsCard() {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.fact_check_outlined),
+        title: const Text('Aprovações pendentes'),
+        subtitle: const Text('Tarefas que a criança já enviou'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/guardian/approvals'),
+      ),
+    );
+  }
+
+  Widget _buildRewardsCard() {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.card_giftcard_outlined),
+        title: const Text('Recompensas'),
+        subtitle: const Text('Catálogo e resgates das crianças'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/guardian/rewards'),
       ),
     );
   }
@@ -274,7 +302,18 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
               title: Text(
                 (child['nickname'] as String?) ?? child['first_name'] as String,
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.checklist_outlined),
+                    tooltip: 'Tarefas',
+                    onPressed: () =>
+                        context.push('/guardian/children/${child['id']}/tasks'),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
               onTap: () => context.push('/guardian/children/${child['id']}'),
             );
           }),

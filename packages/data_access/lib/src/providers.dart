@@ -7,6 +7,12 @@ import 'child_access/child_access_repository.dart';
 import 'client/kids_task_supabase.dart';
 import 'family/child_repository.dart';
 import 'family/family_repository.dart';
+import 'rewards/redemption_repository.dart';
+import 'rewards/reward_repository.dart';
+import 'tasks/occurrence_repository.dart';
+import 'tasks/task_repository.dart';
+import 'tasks/task_template_repository.dart';
+import 'tasks/wallet_repository.dart';
 
 /// Providers de infraestrutura compartilhados pelos dois apps Flutter. Só
 /// devem ser lidos depois de `KidsTaskSupabase.initialize(...)` em `main()`.
@@ -33,6 +39,30 @@ final childAccessRepositoryProvider = Provider<ChildAccessRepository>(
 
 final sessionRoleResolverProvider = Provider<SessionRoleResolver>(
   (ref) => SessionRoleResolver(ref.watch(supabaseClientProvider)),
+);
+
+final taskRepositoryProvider = Provider<TaskRepository>(
+  (ref) => TaskRepository(ref.watch(supabaseClientProvider)),
+);
+
+final occurrenceRepositoryProvider = Provider<OccurrenceRepository>(
+  (ref) => OccurrenceRepository(ref.watch(supabaseClientProvider)),
+);
+
+final taskTemplateRepositoryProvider = Provider<TaskTemplateRepository>(
+  (ref) => TaskTemplateRepository(ref.watch(supabaseClientProvider)),
+);
+
+final walletRepositoryProvider = Provider<WalletRepository>(
+  (ref) => WalletRepository(ref.watch(supabaseClientProvider)),
+);
+
+final rewardRepositoryProvider = Provider<RewardRepository>(
+  (ref) => RewardRepository(ref.watch(supabaseClientProvider)),
+);
+
+final redemptionRepositoryProvider = Provider<RedemptionRepository>(
+  (ref) => RedemptionRepository(ref.watch(supabaseClientProvider)),
 );
 
 /// Emite a cada mudança de estado de autenticação do Supabase (login,
