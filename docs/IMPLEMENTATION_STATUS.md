@@ -122,7 +122,8 @@ ponta a ponta:
 - **Marco 6** — central interna de notificações (`/guardian/notifications`
   e `/child/notifications`, mesma tela `NotificationCenterPage` para os
   dois perfis — a RLS de `notifications` já resolve "de quem" é cada
-  notificação), ícone de sino na home do responsável e da criança.
+  notificação), ícone de sino na home do responsável e da criança, toque
+  marca como lida e navega para o `deep_link` gravado no evento.
   Registro/preferência de push (`register_device_token` etc.) não tem
   tela ainda — sem SDK de push instalado, não há token real para
   registrar (bloqueio abaixo).

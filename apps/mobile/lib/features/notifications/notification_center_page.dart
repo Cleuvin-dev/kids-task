@@ -1,6 +1,7 @@
 import 'package:data_access/data_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/async_error_banner.dart';
 
@@ -43,16 +44,20 @@ class _NotificationCenterPageState
     }
   }
 
-  Future<void> _markRead(Map<String, dynamic> notification) async {
-    if (notification['read_at'] != null) return;
-    try {
-      await ref
-          .read(notificationRepositoryProvider)
-          .markAsRead(notification['id'] as String);
-      await _load();
-    } catch (_) {
-      // Falha silenciosa: a notificação continua marcada como não lida.
+  Future<void> _openNotification(Map<String, dynamic> notification) async {
+    if (notification['read_at'] == null) {
+      try {
+        await ref
+            .read(notificationRepositoryProvider)
+            .markAsRead(notification['id'] as String);
+        await _load();
+      } catch (_) {
+        // Falha silenciosa: a notificação continua marcada como não lida.
+      }
     }
+
+    final deepLink = notification['deep_link'] as String?;
+    if (deepLink != null && mounted) context.push(deepLink);
   }
 
   @override
@@ -90,7 +95,7 @@ class _NotificationCenterPageState
         ),
         title: Text(notification['title'] as String),
         subtitle: Text(notification['body'] as String),
-        onTap: () => _markRead(notification),
+        onTap: () => _openNotification(notification),
       ),
     );
   }

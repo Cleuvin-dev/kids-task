@@ -4,127 +4,145 @@
 
 Não iniciar várias fases incompletas em paralelo. Cada marco termina com migrations, testes, documentação e demonstração funcional.
 
+**Status geral (ver `docs/IMPLEMENTATION_STATUS.md` para o detalhe técnico
+de cada item marcado):** Marcos 0-5 concluídos. Marco 6 concluído
+**parcialmente**. Quando um item está marcado `[x]` mas tem uma lacuna
+relevante, o texto ao lado explica exatamente qual — nunca um item foi
+silenciosamente dado como pronto. Nenhuma migration ou função SQL foi
+executada contra um Postgres real ainda (sem Docker nesta máquina); tudo
+abaixo foi revisado manualmente e coberto por pgTAP, pendente de
+confirmação em CI.
+
 ## 2. Marco 0 — Fundação
 
-- [ ] criar monorepo;
-- [ ] configurar Flutter mobile e admin Web;
-- [ ] configurar packages compartilhados;
-- [ ] criar projetos Supabase/Firebase por ambiente;
-- [ ] preparar CI;
-- [ ] criar `.env.example`;
-- [ ] estabelecer design system e l10n;
-- [ ] criar `docs/IMPLEMENTATION_STATUS.md`;
-- [ ] configurar migrations e testes SQL;
-- [ ] cadastrar ADR da autenticação infantil.
+- [x] criar monorepo;
+- [x] configurar Flutter mobile e admin Web;
+- [x] configurar packages compartilhados;
+- [ ] criar projetos Supabase/Firebase por ambiente — nenhum projeto real existe ainda, só placeholders (bloqueio persistente desde o Marco 0);
+- [x] preparar CI — `.github/workflows/ci.yml` existe, mas nunca rodou de verdade (sem push/PR ainda);
+- [x] criar `.env.example`;
+- [x] estabelecer design system e l10n — l10n só tem a estrutura (ARB com 2 chaves), telas usam texto pt-BR direto, não o `AppLocalizations`;
+- [x] criar `docs/IMPLEMENTATION_STATUS.md`;
+- [x] configurar migrations e testes SQL;
+- [x] cadastrar ADR da autenticação infantil.
 
 Saída: projetos compilando, pipeline verde e banco reproduzível.
 
 ## 3. Marco 1 — Autenticação e família
 
-- [ ] cadastro/login do responsável;
-- [ ] consentimentos;
-- [ ] criar família;
-- [ ] convite e deep link;
-- [ ] cadastrar criança;
-- [ ] código familiar;
-- [ ] PIN opcional;
-- [ ] sessão anônima e vínculo de aparelho;
-- [ ] revogação;
-- [ ] guards por perfil;
-- [ ] RLS familiar.
+- [x] cadastro/login do responsável;
+- [x] consentimentos;
+- [x] criar família;
+- [x] convite e deep link;
+- [x] cadastrar criança;
+- [x] código familiar;
+- [x] PIN opcional;
+- [x] sessão anônima e vínculo de aparelho;
+- [x] revogação;
+- [x] guards por perfil;
+- [x] RLS familiar.
 
 Saída: responsável e criança entram no mesmo app em ambientes diferentes.
 
 ## 4. Marco 2 — Rotina e tarefas
 
-- [ ] catálogo de ícones/tarefas;
-- [ ] tarefas e agendas;
-- [ ] geração de ocorrências;
-- [ ] limite gratuito de três;
-- [ ] tela Hoje;
-- [ ] conclusão automática;
-- [ ] aprovação manual;
-- [ ] rejeição/correção;
-- [ ] atraso/expiração;
-- [ ] realtime;
-- [ ] histórico.
+- [x] catálogo de ícones/tarefas — ~55 templates seedados (docs/17); "ícones" são só chaves lógicas, sem arte própria ainda;
+- [x] tarefas e agendas — os 5 tipos num único formulário com campos condicionais;
+- [x] geração de ocorrências — `pg_cron` diário, disponibilidade não confirmada num projeto real;
+- [x] limite gratuito de três;
+- [x] tela Hoje;
+- [x] conclusão automática;
+- [x] aprovação manual;
+- [x] rejeição/correção;
+- [x] atraso/expiração;
+- [x] realtime;
+- [x] histórico.
 
 Saída: rotina diária completa em dois aparelhos.
 
 ## 5. Marco 3 — KidsCoins e recompensas
 
-- [ ] wallet e ledger;
-- [ ] ajustes manuais;
-- [ ] catálogo de recompensas;
-- [ ] pedido/aprovação/recusa;
-- [ ] entrega e estorno;
-- [ ] conversão simbólica;
-- [ ] testes de concorrência.
+- [x] wallet e ledger;
+- [x] ajustes manuais;
+- [x] catálogo de recompensas;
+- [x] pedido/aprovação/recusa;
+- [x] entrega e estorno;
+- [ ] conversão simbólica — docs/05 seção 6 não implementada; taxa sugerida ainda é pendência não bloqueante (docs/18);
+- [x] testes de concorrência — duplo-approve/duplo-tap cobertos em pgTAP.
 
 Saída: economia familiar íntegra e auditável.
 
 ## 6. Marco 4 — XP e progressão
 
-- [ ] XP ledger;
-- [ ] níveis;
-- [ ] bônus de nível;
-- [ ] unlocks;
-- [ ] streak configurável;
-- [ ] progresso diário;
-- [ ] aniversário;
-- [ ] medalhas;
-- [ ] telas de progresso.
+- [x] XP ledger;
+- [x] níveis;
+- [x] bônus de nível;
+- [ ] unlocks — sem catálogo de cosméticos ainda (depende de conteúdo do Marco 5, que também não foi construído);
+- [x] streak configurável;
+- [x] progresso diário;
+- [x] aniversário;
+- [ ] medalhas — mesma dependência de `unlocks`;
+- [x] telas de progresso.
 
 Saída: gamificação individual sem ranking.
 
 ## 7. Marco 5 — Temas e experiência por idade
 
-- [ ] tema azul/rosa do responsável;
-- [ ] engine de temas infantis;
-- [ ] Tema Infantil Padrão;
-- [ ] Mundo dos Blocos;
-- [ ] temas Premium iniciais;
-- [ ] modo 2–7;
-- [ ] modo 8–10;
-- [ ] modo 11–13+;
-- [ ] movimento/som/acessibilidade;
-- [ ] fallback/versionamento.
+- [x] tema azul/rosa do responsável — agora aplicado de verdade (antes deste marco o app inteiro rodava só no azul);
+- [x] engine de temas infantis — `buildKidsThemeBySlug`, fallback seguro para slug desconhecido;
+- [x] Tema Infantil Padrão;
+- [x] Mundo dos Blocos;
+- [x] temas Premium iniciais — Aventura Espacial e Princesas e Castelos; Mundo Encantado e Herói Aracnídeo ficam `draft` até ter arte;
+- [ ] modo 2–7 — só a paleta de cores muda por tema; densidade/linguagem de UI por faixa etária não foi construída;
+- [ ] modo 8–10 — idem;
+- [ ] modo 11–13+ — idem;
+- [ ] movimento/som/acessibilidade — não existe nenhuma animação de recompensa ainda para aplicar "reduzir movimento"; token `motionReward` existe mas está sem uso real;
+- [x] fallback/versionamento.
 
 Saída: temas individuais estáveis e adequados à idade.
 
 ## 8. Marco 6 — Notificações
 
-- [ ] FCM Android;
-- [ ] APNs/FCM iOS;
-- [ ] tokens;
-- [ ] outbox;
-- [ ] matriz completa de eventos;
-- [ ] preferências;
-- [ ] quiet hours;
-- [ ] notificações internas;
-- [ ] templates seguros;
-- [ ] deep links.
+- [ ] FCM Android — bloqueado: sem projeto Firebase real, nenhum SDK de push foi adicionado ao app;
+- [ ] APNs/FCM iOS — mesmo bloqueio;
+- [x] tokens — `device_tokens` + `register_device_token`/`deactivate_device_token` prontos; sem SDK de push, nenhum token real passa por eles ainda;
+- [x] outbox — `outbox_events`, sem nenhum worker consumindo (não há para onde enviar sem Firebase);
+- [ ] matriz completa de eventos — só os pontos de maior tráfego (tarefa enviada/aprovada/rejeitada, resgate solicitado/aprovado, nível, aniversário); convite aceito, novo aparelho, tarefa próxima/atrasada e o resto da matriz de docs/11 seções 2-3 ficaram de fora;
+- [ ] preferências — schema e RLS prontos (`notification_preferences`), sem tela nem qualquer enforcement real (não há o que fazer com a preferência sem um worker de envio);
+- [ ] quiet hours — mesma lacuna: coluna existe, nada a aplica ainda;
+- [x] notificações internas — central funciona de ponta a ponta nos dois perfis, testada;
+- [ ] templates seguros — sem envio de push real, o texto restrito de lock screen (docs/11 seção 6) ainda não tem onde se aplicar; o conteúdo interno hoje é completo, não restrito;
+- [x] deep links — cada notificação carrega uma rota e a central navega até ela ao abrir.
 
-Saída: ações sincronizadas e notificadas sem dados sensíveis.
+Saída: ações sincronizadas e notificadas sem dados sensíveis — alcançado
+só dentro do app (central interna); a entrega por push de verdade depende
+de um projeto Firebase real.
 
 ## 9. Marco 7 — Premium e painel Web
 
-- [ ] planos/entitlements;
+Não iniciado. Já existe uma base parcial dos Marcos 0-5 que este marco vai
+reaproveitar: `plans` (free/premium, seed desde o Marco 0) e checagem de
+entitlement por plano (`THEME_NOT_ENTITLED` em `apply_child_theme`, Marco 5)
+— falta tudo o que envolve assinatura de verdade e o painel Web em si.
+
+- [ ] planos/entitlements — tabela `plans` e uma checagem de entitlement (temas) já existem; falta o modelo de assinatura;
 - [ ] produtos de loja;
 - [ ] compra e restauração;
 - [ ] validação backend;
 - [ ] webhooks;
 - [ ] downgrade seguro;
-- [ ] painel com MFA;
+- [ ] painel com MFA — `apps/admin_web` ainda é só o scaffold do Marco 0;
 - [ ] famílias/usuários;
 - [ ] assinatura;
-- [ ] temas/conteúdo;
+- [ ] temas/conteúdo — inclui publicar os temas `draft` do Marco 5;
 - [ ] suporte;
 - [ ] métricas e auditoria.
 
 Saída: modelo de negócio operacional.
 
 ## 10. Marco 8 — Privacidade e release
+
+Não iniciado.
 
 - [ ] fluxo de exclusão dupla;
 - [ ] exportação de dados;
