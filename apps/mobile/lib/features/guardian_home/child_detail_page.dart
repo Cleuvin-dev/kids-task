@@ -20,6 +20,12 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
   String? _errorMessage;
   List<Map<String, dynamic>> _devices = const [];
   int _coinBalance = 0;
+  int _currentLevel = 1;
+  int _currentStreak = 0;
+  String _streakRule = 'at_least_one';
+  int _streakPercentage = 80;
+  int _levelBonusCoins = 5;
+  int _birthdayBonusCoins = 50;
 
   @override
   void initState() {
@@ -36,9 +42,26 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
       final wallet = await ref
           .read(walletRepositoryProvider)
           .fetchWallet(widget.childId);
+      final streak = await ref
+          .read(progressRepositoryProvider)
+          .fetchStreak(widget.childId);
+      final profile = await ref
+          .read(supabaseClientProvider)
+          .from('child_profiles')
+          .select(
+            'streak_rule, streak_percentage, level_bonus_coins, birthday_bonus_coins',
+          )
+          .eq('id', widget.childId)
+          .single();
       setState(() {
         _devices = devices;
         _coinBalance = wallet?['coin_balance'] as int? ?? 0;
+        _currentLevel = wallet?['current_level'] as int? ?? 1;
+        _currentStreak = streak?['current_streak'] as int? ?? 0;
+        _streakRule = profile['streak_rule'] as String;
+        _streakPercentage = profile['streak_percentage'] as int;
+        _levelBonusCoins = profile['level_bonus_coins'] as int;
+        _birthdayBonusCoins = profile['birthday_bonus_coins'] as int;
       });
     } catch (_) {
       setState(
@@ -225,6 +248,107 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
     }
   }
 
+  Future<void> _editProgressSettings() async {
+    final percentageController = TextEditingController(
+      text: _streakPercentage.toString(),
+    );
+    final levelBonusController = TextEditingController(
+      text: _levelBonusCoins.toString(),
+    );
+    final birthdayBonusController = TextEditingController(
+      text: _birthdayBonusCoins.toString(),
+    );
+    var rule = _streakRule;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Configurações de progresso'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: rule,
+                decoration: const InputDecoration(labelText: 'Regra de streak'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'at_least_one',
+                    child: Text('Ao menos uma tarefa'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'all_required',
+                    child: Text('Todas as obrigatórias'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'percentage',
+                    child: Text('Percentual mínimo'),
+                  ),
+                ],
+                onChanged: (value) =>
+                    setDialogState(() => rule = value ?? rule),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: percentageController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Percentual mínimo (%)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: levelBonusController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Bônus de KidsCoins por nível',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: birthdayBonusController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Bônus de aniversário (KidsCoins)',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Salvar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref
+          .read(progressRepositoryProvider)
+          .updateProgressSettings(
+            childId: widget.childId,
+            streakRule: rule,
+            streakPercentage:
+                int.tryParse(percentageController.text) ?? _streakPercentage,
+            levelBonusCoins:
+                int.tryParse(levelBonusController.text) ?? _levelBonusCoins,
+            birthdayBonusCoins:
+                int.tryParse(birthdayBonusController.text) ??
+                _birthdayBonusCoins,
+          );
+      await _load();
+    } catch (_) {
+      _showError('Não foi possível salvar as configurações agora.');
+    }
+  }
+
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -250,6 +374,20 @@ class _ChildDetailPageState extends ConsumerState<ChildDetailPage> {
                     trailing: TextButton(
                       onPressed: _adjustCoins,
                       child: const Text('Ajustar'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.local_fire_department_outlined),
+                    title: Text(
+                      'Nível $_currentLevel · $_currentStreak dias de streak',
+                    ),
+                    subtitle: const Text('Regra de streak e bônus'),
+                    trailing: TextButton(
+                      onPressed: _editProgressSettings,
+                      child: const Text('Configurar'),
                     ),
                   ),
                 ),

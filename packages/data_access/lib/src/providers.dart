@@ -10,6 +10,7 @@ import 'family/family_repository.dart';
 import 'rewards/redemption_repository.dart';
 import 'rewards/reward_repository.dart';
 import 'tasks/occurrence_repository.dart';
+import 'tasks/progress_repository.dart';
 import 'tasks/task_repository.dart';
 import 'tasks/task_template_repository.dart';
 import 'tasks/wallet_repository.dart';
@@ -63,6 +64,10 @@ final rewardRepositoryProvider = Provider<RewardRepository>(
 
 final redemptionRepositoryProvider = Provider<RedemptionRepository>(
   (ref) => RedemptionRepository(ref.watch(supabaseClientProvider)),
+);
+
+final progressRepositoryProvider = Provider<ProgressRepository>(
+  (ref) => ProgressRepository(ref.watch(supabaseClientProvider)),
 );
 
 /// Emite a cada mudança de estado de autenticação do Supabase (login,

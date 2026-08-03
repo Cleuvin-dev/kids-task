@@ -4,10 +4,11 @@
 
 **Estado atual:** Marco 0 — Fundação concluído. Marco 1 — Autenticação e
 Família concluído. Marco 2 — Rotina e Tarefas concluído. Marco 3 —
-KidsCoins e Recompensas concluído (com bloqueios de infraestrutura
-documentados abaixo — nada foi executado contra um Postgres real neste
-ciclo). Este documento e o `git log` são a fonte de verdade do que já
-existe; ler esta seção e a "Próxima ação" antes de continuar.
+KidsCoins e Recompensas concluído. Marco 4 — XP e Progressão concluído
+(com bloqueios de infraestrutura documentados abaixo — nada foi executado
+contra um Postgres real neste ciclo). Este documento e o `git log` são a
+fonte de verdade do que já existe; ler esta seção e a "Próxima ação" antes
+de continuar.
 
 ## Repositório
 
@@ -81,6 +82,20 @@ ponta a ponta:
     saldo é insuficiente, lista dos próprios pedidos com status em
     linguagem simples.
   - Nenhuma rota nova mexeu no `redirect` síncrono do router.
+- **Marco 4** — nível, XP e streak, sem tela nova (embutido nas telas
+  existentes):
+  - Criança (`/child/home`): card de nível com barra de progresso até o
+    próximo nível (calculada a partir de `level_definitions` + XP total,
+    o cliente nunca recalcula a fórmula) e contador de dias seguidos de
+    streak.
+  - Responsável (detalhe da criança): card "Nível N · M dias de streak"
+    com um diálogo para configurar a regra de streak
+    (`at_least_one`/`all_required`/`percentage`), o percentual mínimo, o
+    bônus de KidsCoins por nível e o bônus de aniversário — grava direto
+    em `child_profiles` via RLS (mesmo princípio de docs/14 seção 1: sem
+    regra de negócio crítica nesses campos, não precisa de função).
+  - Sem tela de desbloqueios de cosméticos — adiado para o Marco 5 junto
+    do catálogo de temas.
 
 ### Backend (Supabase)
 
@@ -148,6 +163,42 @@ ponta a ponta:
   aprovação, aprovação debita exatamente uma vez mesmo sob retry, entrega
   não debita de novo, rejeição não debita, cancelamento aprovado gera
   estorno integral, isolamento RLS entre famílias e privilégio mínimo.
+- **Marco 4** — migrations (`supabase/migrations/202607311000{20..24}_*.sql`):
+  `level_definitions` (seed de 30 níveis pela fórmula `50 × (L-1) × L` do
+  docs/05 seção 8 — o bônus de KidsCoins por nível continua sendo
+  `child_profiles.level_bonus_coins`, já configurável desde o Marco 1, não
+  uma coluna nova), `daily_progress`, `child_streaks`; `coin_ledger.entry_type`
+  ampliado para `level_bonus`/`birthday_bonus`; funções internas (sem grant
+  a nenhum papel de cliente) `process_level_changes` (credita todos os
+  níveis cruzados numa aprovação, idempotente por
+  `level_up:<child_id>:<level>`), `recalculate_daily_progress` e
+  `advance_streak` (regra por criança, tarefa bônus fora do denominador,
+  tarefa dispensada sai do denominador, dia sem tarefa obrigatória é
+  neutro, idempotente por `last_qualified_date`); `grant_birthday_bonus`
+  (só `service_role`/cron, idempotente por `birthday:<child_id>:<year>`,
+  29/02 vira 28/02 em ano não bissexto). `complete_task_occurrence` e
+  `review_task_occurrence` (do Marco 2) foram **redefinidas** (novo
+  `create or replace function` numa migration nova — a migration original
+  do Marco 2, já commitada, não foi editada) para chamar as três funções
+  de progressão depois de `grant_task_rewards`.
+- **Simplificações registradas** (ver comentários nas migrations): (1)
+  `recalculate_daily_progress` usa a definição *atual* de
+  `tasks.is_required`/`is_bonus`, não um snapshot por ocorrência — o
+  Marco 2 não persistiu esse snapshot; a janela de divergência é pequena
+  porque o recálculo roda no mesmo dia da aprovação; (2) `advance_streak`
+  cobre o caso comum (dias processados em ordem crescente) — uma
+  aprovação tardia que corrige um dia muito antigo não recalcula toda a
+  cadeia de streak seguinte automaticamente; (3) desbloqueios de
+  cosméticos (`cosmetic_items`/`child_unlocks`, docs/05 seção 10) ficam
+  para o Marco 5, junto do catálogo de temas — schema vazio sem conteúdo
+  para desbloquear não agregaria nada agora.
+- pgTAP: `supabase/tests/database/40_marco4_progression_test.sql`
+  (39 asserções) cobrindo cruzar um nível, cruzar vários níveis numa só
+  aprovação, retry sem duplicar bônus, aniversário idempotente (com
+  proteção para o teste rodar num 29/02), streak nas três regras
+  (`at_least_one`, `percentage`), dia neutro com tarefa dispensada, streak
+  quebrando com tarefa obrigatória não cumprida, isolamento RLS e
+  privilégio mínimo.
 
 ### CI
 
@@ -163,8 +214,8 @@ ponta a ponta:
 | 1 — Autenticação e família | **Concluído** | Ver seções acima; testes abaixo |
 | 2 — Rotina e tarefas | **Concluído** | Ver seções acima; testes abaixo |
 | 3 — KidsCoins e recompensas | **Concluído** | Ver seções acima; testes abaixo. Taxa de conversão simbólica KidsCoin→BRL (docs/05 seção 6) **não implementada** — valor sugerido ainda é pendência não bloqueante (docs/18) |
-| 4 — XP e progressão | Não iniciado | `xp_ledger`/`child_wallets.current_level` já existem como schema (Marco 2, placeholder nunca escrito); falta nível, streak, desbloqueios |
-| 5 — Temas e idade | Não iniciado | Catálogo de temas e assets já registrados em `design_system` (`kidsThemeCatalog`), aguardando telas/backend de seleção |
+| 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
+| 5 — Temas e idade | Não iniciado | Catálogo de temas e assets já registrados em `design_system` (`kidsThemeCatalog`), aguardando telas/backend de seleção; também herda os desbloqueios de cosméticos adiados do Marco 4 |
 | 6 — Notificações | Não iniciado | — |
 | 7 — Premium e painel | Não iniciado | — |
 | 8 — Privacidade e release | Não iniciado | — |
@@ -176,16 +227,16 @@ ponta a ponta:
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
 | `flutter test` | domain (26), data_access (9), design_system (8), apps/mobile (5), apps/admin_web (1) | ✅ 49/49 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations, funções SQL e os pgTAP dos Marcos 2 e 3 (73 asserções ao todo) revisados manualmente linha a linha, execução real pendente do CI |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations, funções SQL e os pgTAP dos Marcos 2-4 (112 asserções ao todo) revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
 
 1. **Docker ausente localmente** — impede `supabase start`/`db lint`/
    `test db`/`functions serve` nesta máquina. As migrations, políticas RLS
-   e funções SQL dos Marcos 2 e 3 foram revisadas manualmente com atenção a
+   e funções SQL dos Marcos 2-4 foram revisadas manualmente com atenção a
    nomes de coluna, tipos e assinaturas, mas **não foram executadas** contra
-   um Postgres real. Isso inclui os dois pgTAP novos, que só serão
+   um Postgres real. Isso inclui os três pgTAP novos, que só serão
    confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` assume que a extensão está
@@ -230,22 +281,18 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 4 — XP e Progressão**: `process_level_changes` (calcula nível a
-partir do `xp_ledger` já existente, concede bônus de nível configurável por
-criança — `child_wallets.current_level`, já reservado desde o Marco 2 —,
-lida com pular vários níveis numa só aprovação, idempotente por
-`level_up:<child_id>:<level>`), `grant_birthday_bonus` (uma vez por ano,
-`birthday:<child_id>:<year>`, regra especial para 29/02),
-`recalculate_daily_progress`/`advance_streak` (regra por criança —
-`at_least_one`/`all_required`/`percentage`, já modelada em
-`child_profiles.streak_rule`/`streak_percentage` desde o Marco 1 — tarefas
-bônus fora do denominador, tarefa dispensada sai do denominador, dia sem
-tarefa obrigatória é neutro), desbloqueios de cosméticos por nível+plano
-(`level_definitions`, `cosmetic_items`, `child_unlocks`), tela de
-progresso/nível/streak na criança, sem ranking entre irmãos (docs/05
-seções 7-13).
+**Marco 5 — Temas e Experiência por Idade**: catálogo de temas publicados
+(`themes`/`theme_assets`, docs/09 seção 6 — hoje só existe
+`kidsThemeCatalog` estático em `packages/design_system`, sem tabela nem
+publicação/versão real), `list_available_themes`/`apply_child_theme`
+(valida família, papel, estado publicado, entitlement do plano e nível —
+o nível já é calculado desde o Marco 4), fallback para asset ausente,
+downgrade de Premium trocando tema sem quebrar a tela (docs/15 seção 10).
+Este marco também é o momento natural de implementar `cosmetic_items`/
+`child_unlocks` (adiados do Marco 4 — docs/05 seção 10): sem um catálogo
+de temas real, não havia o que desbloquear ainda.
 
-Antes de iniciar, recomenda-se validar os Marcos 1-3 num ambiente com
+Antes de iniciar, recomenda-se validar os Marcos 1-4 num ambiente com
 Docker (`supabase start`, `supabase db lint --local`, `supabase test db`) e,
 se possível, um projeto Supabase real de desenvolvimento — nenhuma migration
 ou função SQL destes marcos foi executada contra um Postgres de verdade

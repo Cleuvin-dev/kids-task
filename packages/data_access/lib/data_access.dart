@@ -16,6 +16,7 @@ export 'src/providers.dart';
 export 'src/rewards/redemption_repository.dart';
 export 'src/rewards/reward_repository.dart';
 export 'src/tasks/occurrence_repository.dart';
+export 'src/tasks/progress_repository.dart';
 export 'src/tasks/task_repository.dart';
 export 'src/tasks/task_template_repository.dart';
 export 'src/tasks/wallet_repository.dart';

@@ -24,6 +24,10 @@ class _ChildHomePageState extends ConsumerState<ChildHomePage> {
   bool _loading = true;
   Map<String, dynamic>? _child;
   int _coinBalance = 0;
+  int _currentLevel = 1;
+  int _totalXp = 0;
+  int _currentStreak = 0;
+  List<Map<String, dynamic>> _levelDefs = const [];
 
   @override
   void initState() {
@@ -42,13 +46,38 @@ class _ChildHomePageState extends ConsumerState<ChildHomePage> {
       final wallet = await ref
           .read(walletRepositoryProvider)
           .fetchWallet(widget.childId);
+      final streak = await ref
+          .read(progressRepositoryProvider)
+          .fetchStreak(widget.childId);
+      final levelDefs = await ref
+          .read(progressRepositoryProvider)
+          .listLevelDefinitions();
       setState(() {
         _child = child;
         _coinBalance = wallet?['coin_balance'] as int? ?? 0;
+        _currentLevel = wallet?['current_level'] as int? ?? 1;
+        _totalXp = wallet?['total_xp'] as int? ?? 0;
+        _currentStreak = streak?['current_streak'] as int? ?? 0;
+        _levelDefs = levelDefs;
       });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  double get _levelProgress {
+    final current = _levelDefs.firstWhere(
+      (l) => l['level'] == _currentLevel,
+      orElse: () => const {'min_total_xp': 0},
+    );
+    final next = _levelDefs.firstWhere(
+      (l) => l['level'] == _currentLevel + 1,
+      orElse: () => const {},
+    );
+    final currentMin = current['min_total_xp'] as int? ?? 0;
+    final nextMin = next['min_total_xp'] as int?;
+    if (nextMin == null || nextMin <= currentMin) return 1;
+    return ((_totalXp - currentMin) / (nextMin - currentMin)).clamp(0, 1);
   }
 
   Future<void> _requestExit() async {
@@ -139,6 +168,44 @@ class _ChildHomePageState extends ConsumerState<ChildHomePage> {
                 trailing: FilledButton.tonal(
                   onPressed: () => context.push('/child/rewards'),
                   child: const Text('Recompensas'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Nível $_currentLevel',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.local_fire_department_outlined,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 4),
+                            Text('$_currentStreak dias seguidos'),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: _levelProgress,
+                        minHeight: 8,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
