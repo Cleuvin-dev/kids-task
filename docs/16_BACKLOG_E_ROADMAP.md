@@ -120,20 +120,18 @@ de um projeto Firebase real.
 
 ## 9. Marco 7 — Premium e painel Web
 
-Não iniciado. Já existe uma base parcial dos Marcos 0-5 que este marco vai
-reaproveitar: `plans` (free/premium, seed desde o Marco 0) e checagem de
-entitlement por plano (`THEME_NOT_ENTITLED` em `apply_child_theme`, Marco 5)
-— falta tudo o que envolve assinatura de verdade e o painel Web em si.
+Parcial. Fatia 1 (backend de assinaturas) concluída — ver
+`docs/IMPLEMENTATION_STATUS.md`. Falta tudo o que é painel Web em si.
 
-- [ ] planos/entitlements — tabela `plans` e uma checagem de entitlement (temas) já existem; falta o modelo de assinatura;
-- [ ] produtos de loja;
-- [ ] compra e restauração;
-- [ ] validação backend;
-- [ ] webhooks;
-- [ ] downgrade seguro;
+- [x] planos/entitlements — modelo de assinatura completo (`subscriptions`, `v_effective_entitlements`, `resolve_effective_plan_code`);
+- [x] produtos de loja — `subscription_products`, mapeamento versionado store+product_id→plano;
+- [x] compra e restauração — `submit_purchase_receipt`, `restore_entitlements`;
+- [x] validação backend — `verify_purchase` (máquina de estados real; validação criptográfica contra a loja em si continua bloqueada por falta de conta de desenvolvedor, docs/18 seção 5);
+- [x] webhooks — `handle_apple_notification`/`handle_google_notification`, idempotentes e com detecção de evento fora de ordem; nenhuma Edge Function de recepção/validação de assinatura foi criada ainda;
+- [x] downgrade seguro — `apply_safe_downgrade`/`restore_paused_entitlements`, testado (docs/02 seção 5);
 - [ ] painel com MFA — `apps/admin_web` ainda é só o scaffold do Marco 0;
 - [ ] famílias/usuários;
-- [ ] assinatura;
+- [ ] assinatura (módulo do painel — ver docs/12 seção 5, distinto do backend acima);
 - [ ] temas/conteúdo — inclui publicar os temas `draft` do Marco 5;
 - [ ] suporte;
 - [ ] métricas e auditoria.

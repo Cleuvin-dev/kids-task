@@ -96,6 +96,23 @@ O time pode decidir, documentando em ADR:
 - uso ou não de serviço externo de crash reporting após revisão de privacidade;
 - estratégia de backup e região.
 
+Pendências específicas do backend de assinaturas (Marco 7, fatia 1 —
+`docs/IMPLEMENTATION_STATUS.md`):
+
+- Edge Function que valida a assinatura/autenticidade do webhook (JWS da
+  Apple, Pub/Sub da Google) antes de chamar `handle_apple_notification`/
+  `handle_google_notification` — ainda não existe; hoje essas funções SQL
+  são `service_role`-only e presumem que o chamador já validou. Depende das
+  contas de desenvolvedor Apple/Google (seção 5 acima);
+- `apply_safe_downgrade` sempre reverte tema Premium para `kids_default`,
+  sem lembrar o último tema gratuito usado pela criança — exigiria uma
+  coluna de histórico não implementada; docs/02 seção 5 não especifica qual
+  tema gratuito deve valer;
+- Critério de desempate de quais ocorrências do dia permanecem ativas no
+  downgrade: as mais antigas por `created_at`. docs/02 seção 5 não define
+  um critério; se o produto quiser outro (ex.: por horário programado da
+  tarefa), é uma migration nova em `apply_safe_downgrade`.
+
 ## 8. Decisões que não estão pendentes
 
 Não reabrir sem solicitação do proprietário:

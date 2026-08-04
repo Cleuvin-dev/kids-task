@@ -1,6 +1,6 @@
 # Status de Implementação
 
-**Última atualização:** 03/08/2026
+**Última atualização:** 04/08/2026
 
 **Estado atual:** Marco 0 — Fundação concluído. Marco 1 — Autenticação e
 Família concluído. Marco 2 — Rotina e Tarefas concluído. Marco 3 —
@@ -8,9 +8,11 @@ KidsCoins e Recompensas concluído. Marco 4 — XP e Progressão concluído.
 Marco 5 — Temas e Experiência por Idade concluído. Marco 6 — Notificações
 concluído **parcialmente** (central interna funciona de ponta a ponta;
 push de verdade via FCM/APNs está bloqueado por falta de projeto Firebase
-real — ver "Bloqueios"). Este documento e o `git log` são a fonte de
-verdade do que já existe; ler esta seção e a "Próxima ação" antes de
-continuar.
+real — ver "Bloqueios"). Marco 7 — Premium e Painel iniciado
+**parcialmente**: só o backend de assinaturas (fatia 1) está pronto —
+`apps/admin_web` continua sendo o scaffold do Marco 0, sem MFA nem
+módulos. Este documento e o `git log` são a fonte de verdade do que já
+existe; ler esta seção e a "Próxima ação" antes de continuar.
 
 ## Repositório
 
@@ -308,6 +310,55 @@ ponta a ponta:
   não duplica linha), marcar como lida (e bloqueio de papel errado),
   isolamento RLS entre famílias e privilégio mínimo.
 
+### Backend de assinaturas (Marco 7, fatia 1)
+
+Só o backend — `apps/admin_web` continua sendo o scaffold do Marco 0
+(`FoundationPage`), sem login/MFA/módulos ainda; isso fica para a próxima
+fatia (ver "Próxima ação").
+
+- `subscription_products`: mapeamento versionado `store + product_id →
+  plan_code + billing_period`, seed com `kids_task_premium_monthly`/`_yearly`
+  para `apple`/`google` (docs/13 seção 2 — IDs finais de loja continuam
+  pendentes, bloqueio 4 abaixo).
+- `subscriptions` (uma linha por família, criada automaticamente junto com
+  `create_family` via gatilho) e `subscription_events` (ledger append-only,
+  `family_id` nullable para persistir webhook órfão) com RLS restrita ao
+  responsável da família.
+- Funções: `submit_purchase_receipt` (client-facing) → `verify_purchase`
+  (interna) → `apply_subscription_transition` → `apply_safe_downgrade` /
+  `restore_paused_entitlements`; `handle_apple_notification` /
+  `handle_google_notification` (webhook, via `handle_store_notification`
+  compartilhada) com idempotência por `store_event_id` e detecção de evento
+  fora de ordem; `restore_entitlements`.
+- **Bloqueio conhecido, documentado inline em `verify_purchase`**: sem conta
+  de desenvolvedor Apple/Google (docs/18 seção 5), não há validação
+  criptográfica real do recibo contra a loja — a máquina de estados
+  (idempotência, mapeamento de produto, vínculo à família) é real; só a
+  chamada de rede à loja está isolada num bloco comentado para ser trocada
+  depois, mesmo padrão do `send-guardian-invite` do Marco 1. Da mesma forma,
+  nenhuma Edge Function de webhook foi criada nesta fatia — `handle_apple_
+  notification`/`handle_google_notification` pressupõem uma Edge Function
+  futura validando a assinatura do webhook antes de chamá-las.
+- Downgrade seguro (docs/02 seção 5): `apply_safe_downgrade` escolhe/mantém
+  `families.primary_child_id`, pausa (`status='plan_paused'`) crianças e
+  ocorrências futuras excedentes sem apagar nada, reverte tema Premium para
+  `kids_default` (simplificação assumida — sem histórico de "último tema
+  gratuito" persistido). `restore_paused_entitlements` reverte tudo ao
+  reativar o Premium.
+- `v_effective_entitlements`: view que o app deve consultar para o plano
+  efetivo da família (docs/13 seção 5), considerando o status da assinatura
+  além do `plan_id` em cache.
+- pgTAP: `supabase/tests/database/70_marco7_subscriptions_test.sql`
+  (39 asserções) cobrindo validação/controle de acesso, compra válida,
+  restauração sem duplicar, idempotência e ordenação de webhook, isolamento
+  RLS entre famílias, privilégio mínimo e o downgrade seguro completo
+  (5 crianças → 1 ativa + 4 pausadas, 10 ocorrências futuras → 3 ativas +
+  7 pausadas, ocorrências de hoje intocadas, nada apagado, reativação
+  restaura tudo).
+- Sem mudança em `packages/domain`/`packages/data_access` nesta fatia: os
+  códigos de erro usados já existiam; sem UI consumindo ainda, nenhum
+  `SubscriptionRepository` foi criado.
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -325,27 +376,29 @@ ponta a ponta:
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
-| 7 — Premium e painel | Não iniciado | — |
+| 7 — Premium e painel | **Parcial** | Backend de assinaturas completo (ver seção acima). Painel Web (`apps/admin_web`) continua só o scaffold do Marco 0 — sem MFA, sem módulos |
 | 8 — Privacidade e release | Não iniciado | — |
 
-## Testes (executados localmente em 03/08/2026)
+## Testes (executados localmente em 04/08/2026)
 
 | Comando | Escopo | Resultado |
 |---|---|---|
-| `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
+| `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes (nenhum código Dart mudou nesta fatia) |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
 | `flutter test` | domain (26), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (1) | ✅ 52/52 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ausente aqui); migrations, funções SQL e os pgTAP dos Marcos 2-6 (155 asserções ao todo) revisados manualmente linha a linha, execução real pendente do CI |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 4 migrations novas e o pgTAP de assinaturas (39 asserções, total 194 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
 
 1. **Docker ausente localmente** — impede `supabase start`/`db lint`/
-   `test db`/`functions serve` nesta máquina. As migrations, políticas RLS
-   e funções SQL dos Marcos 2-6 foram revisadas manualmente com atenção a
-   nomes de coluna, tipos e assinaturas, mas **não foram executadas** contra
-   um Postgres real. Isso inclui os cinco pgTAP novos, que só serão
-   confirmados quando rodarem em CI ou numa máquina com Docker.
+   `test db`/`functions serve` nesta máquina (reverificado nesta fatia:
+   continua ausente). As migrations, políticas RLS e funções SQL dos
+   Marcos 2-7 foram revisadas manualmente com atenção a nomes de coluna,
+   tipos e assinaturas, mas **não foram executadas** contra um Postgres
+   real. Isso inclui o pgTAP de assinaturas
+   (`70_marco7_subscriptions_test.sql`), que só será confirmado quando
+   rodar em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` assume que a extensão está
    disponível (padrão em projetos Supabase Cloud), mas isso só pode ser
@@ -393,23 +446,27 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 — Premium e Painel**: compras via loja (`get_store_products` no
-cliente, `verify_purchase`/`handle_apple_notification`/
-`handle_google_notification`/`restore_entitlements`/
-`apply_subscription_transition`/`apply_safe_downgrade`, docs/14 seção 7),
-tabelas `subscriptions`/`subscription_events` (docs/09 seção 6); painel
-administrativo Web (`apps/admin_web`, hoje só um scaffold do Marco 0) com
-MFA e gestão de família/usuário — inclusive a publicação real dos temas
-`draft` do Marco 5 e do catálogo de recompensas/templates, que hoje só
-avança por migration.
+**Marco 7 (fatia 2) — Fundação do painel Web (login + MFA)**: o backend de
+assinaturas (fatia 1, ver seção acima) está pronto. A próxima fatia é
+construir `apps/admin_web` a partir do scaffold do Marco 0
+(`FoundationPage`) — schema `platform_admins`/papéis (`super_admin`,
+`support`, `content`, `billing`) + auditoria append-only + RLS (docs/12
+seção 2 e 10); MFA obrigatório via Supabase Auth (TOTP); no Flutter, um
+`AdminSession`/resolver dedicado em `packages/data_access` (separado do
+`SessionRoleResolver` do app móvel, já que responsável não passa por MFA e
+o painel é "login separado do app infantil", docs/12 seção 10) e roteamento
+por papel usando o mesmo padrão `ref.listen` + `AsyncValue.when` síncrono já
+validado em `apps/mobile/lib/app/router.dart` (evita o deadlock de redirect
+assíncrono do go_router). Sem dashboard/famílias/conteúdo/suporte ainda —
+isso fica para fatias seguintes dentro do próprio Marco 7.
 
 Pendências técnicas ainda não decididas que bloqueiam parte deste marco
 (docs/18): contas de desenvolvedor Apple/Google Play, IDs de produto de
-assinatura, domínio/hospedagem do painel Web — nenhuma delas impede
-desenhar o modelo de dados e as funções de webhook, mas testar a compra de
-verdade depende de contas de loja reais que ainda não existem.
+assinatura em produção, domínio/hospedagem do painel Web — nenhuma delas
+impede a fundação do painel ou o backend de assinaturas já construído, mas
+testar a compra de verdade e publicar o painel dependem delas.
 
-Antes de iniciar, recomenda-se validar os Marcos 1-6 num ambiente com
+Antes de continuar, recomenda-se validar os Marcos 1-7 num ambiente com
 Docker (`supabase start`, `supabase db lint --local`, `supabase test db`) e,
 se possível, um projeto Supabase real de desenvolvimento — nenhuma migration
 ou função SQL destes marcos foi executada contra um Postgres de verdade
