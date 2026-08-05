@@ -12,10 +12,12 @@ real — ver "Bloqueios"). Marco 7 — Premium e Painel iniciado
 **parcialmente**: backend de assinaturas (fatia 1), fundação do painel Web
 — login separado + MFA obrigatório + auditoria (fatia 2), módulo
 Assinaturas (fatia 3: busca de família, plano efetivo, override de
-suporte) e módulo "Famílias e usuários" (fatia 4: busca, detalhe com
+suporte), módulo "Famílias e usuários" (fatia 4: busca, detalhe com
 identidade infantil oculta por padrão, aparelhos, consentimentos e
-alteração de status com revogação de aparelhos infantis) estão prontos;
-`apps/admin_web` ainda não tem conteúdo, notificações nem suporte. Este
+alteração de status com revogação de aparelhos infantis) e módulo "Temas e
+conteúdo" (fatia 5: catálogo de temas — criar rascunho, editar, publicar
+versionado, retirar — e fila de solicitações Premium de tema) estão
+prontos; `apps/admin_web` ainda não tem notificações nem suporte. Este
 documento e o `git log` são a fonte de verdade do que já existe; ler esta
 seção e a "Próxima ação" antes de continuar.
 
@@ -227,6 +229,33 @@ distintas.
     migration). Do lado do responsável, `SessionRoleResolver` (app móvel)
     passa a tratar `families.status` fora de `active`/`restricted` como um
     estado de sessão bloqueado — ver "apps/mobile" acima.
+- **Marco 7 (fatia 5)** — módulo "Temas e conteúdo" (docs/12 seção 6),
+  visível só para `super_admin`/`content` (é a primeira fatia em que o
+  papel `content` enxerga algum módulo — até aqui via "Nenhum módulo
+  disponível" na home):
+  - `/admin/themes`: catálogo inteiro (inclusive `draft`/`retired`, ao
+    contrário do que a criança/responsável vê) com "Criar rascunho"
+    (slug/nome/plano), por tema "Editar asset" (aponta
+    `manifest_json.background_asset_key` — ver simplificação abaixo),
+    "Publicar" (diálogo com checkbox obrigatório confirmando revisão de
+    licença/proveniência, contraste/acessibilidade, propriedade
+    intelectual e tamanho máximo, docs/12 seção 6) e "Retirar"; abaixo,
+    fila de solicitações Premium de tema (`theme_requests`, Marco 5, sem
+    tela nenhuma até aqui) com "Marcar como revisado".
+  - `packages/data_access/src/admin/admin_theme_repository.dart`:
+    `AdminThemeRepository` — todas as escritas já gravam a própria
+    auditoria no banco.
+  - **Simplificação registrada**, mesma raiz da já registrada no Marco 5
+    (sem `theme_assets`/pipeline de CDN): "upload de assets" não é upload
+    de arquivo — o catálogo de temas do app é código Dart compilado em
+    `packages/design_system` (`buildKidsThemeBySlug`), não carregado de um
+    Storage em runtime. O painel administra o metadado do catálogo (slug,
+    nome, plano, status, versão, chave do asset); a arte em si continua
+    sendo um processo manual de desenvolvimento — um dev builda o tema e
+    processa os assets, o painel só aponta o manifest pra chave já pronta.
+    Do mesmo jeito, licença/proveniência/contraste/acessibilidade/tamanho
+    máximo são confirmados por revisão humana (checkbox obrigatório antes
+    de publicar), não por um validador automático que não existe.
 
 ### Backend (Supabase)
 
@@ -579,6 +608,49 @@ fatia (ver "Próxima ação").
   auditoria, reativar não restaura aparelho nem notifica de novo);
   privilégio mínimo.
 
+### Backend do módulo Temas e conteúdo (Marco 7, fatia 5)
+
+- Migrations (`supabase/migrations/202607311000{49..51}_*.sql`).
+- `admin_list_themes` (`super_admin`/`content`, catálogo inteiro
+  independente de status — a policy `themes_select_authenticated` do
+  Marco 5 só mostra `published` para o app, então esta função é o único
+  jeito do painel ver `draft`/`retired`) e `admin_create_theme_draft`
+  (slug/nome/plano validados, slug duplicado rejeitado, nasce sempre
+  `draft` na versão 1).
+- `admin_update_theme_manifest`: só bump `version` quando o tema já está
+  `published` (editar um rascunho ainda não é uma "versão" publicada,
+  docs/12 seção 12: "publicação de tema é versionada"); rejeita edição de
+  tema `retired` (precisa republicar antes).
+- `admin_publish_theme`: exige `p_ip_review_confirmed = true` e
+  `manifest_json.background_asset_key` preenchido (não publica um tema
+  visualmente vazio); rejeita publicar um tema já publicado; republicar a
+  partir de `retired` bump a versão (é conteúdo novo voltando ao ar).
+- `admin_retire_theme`: só a partir de `published`. Não apaga a linha nem
+  desvincula `child_profiles.theme_slug` de quem já usa o tema — RLS do
+  cliente e `apply_child_theme` (Marco 5) já filtram por `published`,
+  então retirar só tira o tema do catálogo para novas escolhas;
+  `buildKidsThemeBySlug` resolve pelo catálogo estático do app, sem
+  consultar `themes`, então quem já tinha o tema aplicado não é afetado
+  (docs/12 seção 6: "retirar sem quebrar famílias atuais").
+- `admin_list_theme_requests` (security definer, junta `families.name` e
+  `auth.users.email` de quem pediu — mesmo motivo de
+  `admin_search_families`, e-mail não é visível via RLS a `authenticated`)
+  e `admin_review_theme_request` (`pending → reviewed`, rejeita revisar
+  duas vezes) — dão vida à fila de `theme_requests` que existia sem
+  nenhuma tela desde o Marco 5.
+- Todas as cinco funções de escrita chamam `record_admin_audit_log`.
+  Nenhuma exige `p_idempotency_key`: são transições de status internas de
+  baixo risco, sem notificação nem efeito em cascata sobre outra tabela —
+  mesmo padrão (sem idempotência) de `mark_notification_read` no Marco 6.
+- pgTAP: `supabase/tests/database/110_marco7_admin_themes_test.sql`
+  (33 asserções) cobrindo: controle de acesso por papel em todas as sete
+  funções; criação de rascunho (validação, slug duplicado); edição de
+  manifest (versiona só quando publicado, rejeita tema retirado/
+  inexistente); publicação (exige confirmação de revisão de PI e asset
+  key, rejeita publicar duas vezes, republicar retirado bump versão);
+  retirada (só a partir de publicado); fila de solicitações (join
+  família/e-mail, rejeita revisar duas vezes); privilégio mínimo.
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -596,7 +668,7 @@ fatia (ver "Próxima ação").
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
-| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria), módulo Assinaturas (busca de família, plano efetivo, override de suporte) e módulo Famílias e usuários (busca, detalhe com identidade infantil oculta por padrão, aparelhos, consentimentos, alteração de status) prontos — ver seções acima. `apps/admin_web` ainda não tem conteúdo, notificações nem suporte |
+| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria), módulo Assinaturas, módulo Famílias e usuários e módulo Temas e conteúdo (catálogo de temas versionado + fila de solicitações Premium) prontos — ver seções acima. `apps/admin_web` ainda não tem notificações nem suporte |
 | 8 — Privacidade e release | Não iniciado | — |
 
 ## Testes (executados localmente em 05/08/2026)
@@ -605,8 +677,8 @@ fatia (ver "Próxima ação").
 |---|---|---|
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (6) | ✅ 60/60 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 5 migrations novas e o pgTAP do módulo Famílias e usuários (32 asserções, total 271 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (7) | ✅ 61/61 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 3 migrations novas e o pgTAP do módulo Temas e conteúdo (33 asserções, total 304 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
@@ -619,9 +691,10 @@ fatia (ver "Próxima ação").
    real. Isso inclui o pgTAP de assinaturas
    (`70_marco7_subscriptions_test.sql`), o de administradores da
    plataforma (`80_marco7_platform_admin_test.sql`), o do módulo
-   Assinaturas do painel (`90_marco7_admin_subscriptions_test.sql`) e o do
-   módulo Famílias e usuários (`100_marco7_admin_families_test.sql`), que
-   só serão confirmados quando rodarem em CI ou numa máquina com Docker.
+   Assinaturas do painel (`90_marco7_admin_subscriptions_test.sql`), o do
+   módulo Famílias e usuários (`100_marco7_admin_families_test.sql`) e o do
+   módulo Temas e conteúdo (`110_marco7_admin_themes_test.sql`), que só
+   serão confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` (e, desde a fatia 3 do Marco 7,
    também `20260731100042_admin_subscription_cron.sql`, que agenda
@@ -671,24 +744,32 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 (fatia 5) — Módulo "Temas e conteúdo"** (docs/12 seção 6): login,
-MFA, auditoria (fatia 2), Assinaturas (fatia 3) e Famílias e usuários
-(fatia 4) estão prontos. Falta:
-- publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo —
-  hoje sem arte própria, então publicar de verdade continua bloqueado até
-  existir conteúdo; a tela em si pode existir e operar sobre os temas já
-  publicados enquanto isso);
-- CRUD de rascunho de tema (criar, upload de asset, validar manifest,
-  pré-visualizar por faixa etária, definir gratuito/Premium, publicar,
-  retirar sem quebrar famílias atuais — docs/12 seção 6);
-- fila de solicitações Premium (`theme_requests`, já existe desde o
-  Marco 5 sem nenhuma tela administrativa consumindo).
+**Marco 7 (fatia 6) — Módulo "Suporte"** (docs/12 seção 9): login, MFA,
+auditoria (fatia 2), Assinaturas (fatia 3), Famílias e usuários (fatia 4)
+e Temas e conteúdo (fatia 5) estão prontos. Falta:
+- schema de tickets (categoria, prioridade, anexos privados, timeline,
+  resposta, encerramento, vínculo com incidente — nada disso existe ainda,
+  ao contrário de temas/assinaturas/famílias que já tinham alguma base do
+  app móvel para herdar);
+- explicitamente **sem impersonação** (docs/12 seção 9) — nenhuma
+  ferramenta de acesso assistido nesta fatia; se um dia existir, precisa de
+  consentimento, tempo limitado e auditoria destacada, não é o escopo
+  padrão de um ticket;
+- anexos privados exigem decidir armazenamento (Supabase Storage com
+  bucket privado, policy por ticket) — primeira vez que o painel precisa de
+  upload de arquivo de verdade (ao contrário do "editar chave de asset" da
+  fatia 5, que não subia nenhum arquivo).
 
-Depois: "Suporte" (seção 9) e "Notificações" do painel (seção 8: templates,
-histórico de entrega, reprocessamento). "Gestão de papéis" (seção 2,
-`super_admin` promover outros administradores pela UI) continua sem
-prioridade definida — provisionar um admin é manual (abaixo) e nenhum
-módulo até agora dependeu disso de verdade.
+Publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo)
+continua bloqueado por falta de arte própria — a fatia 5 deixou o
+mecanismo pronto (`admin_publish_theme` já valida asset key e confirmação
+de PI), só falta o conteúdo em si.
+
+Depois: "Notificações" do painel (seção 8: templates, histórico de
+entrega, reprocessamento). "Gestão de papéis" (seção 2, `super_admin`
+promover outros administradores pela UI) continua sem prioridade definida
+— provisionar um admin é manual (abaixo) e nenhum módulo até agora
+dependeu disso de verdade.
 
 Um administrador ainda precisa ser provisionado manualmente para testar
 qualquer módulo (`service_role`: criar o usuário no Supabase Auth e inserir

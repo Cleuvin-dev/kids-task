@@ -121,8 +121,9 @@ de um projeto Firebase real.
 ## 9. Marco 7 — Premium e painel Web
 
 Parcial. Fatias 1 (backend de assinaturas), 2 (fundação do painel: login,
-MFA, auditoria), 3 (módulo Assinaturas) e 4 (módulo Famílias e usuários)
-concluídas — ver `docs/IMPLEMENTATION_STATUS.md`.
+MFA, auditoria), 3 (módulo Assinaturas), 4 (módulo Famílias e usuários) e
+5 (módulo Temas e conteúdo) concluídas — ver
+`docs/IMPLEMENTATION_STATUS.md`.
 
 - [x] planos/entitlements — modelo de assinatura completo (`subscriptions`, `v_effective_entitlements`, `resolve_effective_plan_code`);
 - [x] produtos de loja — `subscription_products`, mapeamento versionado store+product_id→plano;
@@ -133,7 +134,7 @@ concluídas — ver `docs/IMPLEMENTATION_STATUS.md`.
 - [x] painel com MFA — fundação pronta: login separado, `platform_admins`, MFA obrigatório (TOTP) e auditoria (`record_admin_audit_log`);
 - [x] famílias/usuários — busca, detalhe (responsáveis, plano, crianças com identidade oculta por padrão e revelação justificada/auditada, aparelhos, consentimentos) e `admin_set_family_status` (docs/12 seção 11: motivo obrigatório, revoga aparelhos infantis, notifica responsáveis, auditado); o bloqueio do lado do responsável é aplicado pelo app móvel (`SessionRoleResolver`/`GuardianFamilyBlocked`), já que a sessão do Supabase Auth não pode ser revogada por uma função SQL comum;
 - [x] assinatura (módulo do painel — docs/12 seção 5): busca de família, plano efetivo, eventos, conceder/revogar override de suporte com expiração automática (`expire_support_overrides` via `pg_cron`);
-- [ ] temas/conteúdo — inclui publicar os temas `draft` do Marco 5;
+- [x] temas/conteúdo — catálogo administrado de ponta a ponta (criar rascunho, editar chave de asset, publicar com versionamento e confirmação de revisão de PI, retirar sem quebrar famílias atuais) e fila de solicitações Premium de tema; publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo) continua bloqueado só por falta de arte própria, não de mecanismo;
 - [ ] suporte;
 - [ ] métricas e auditoria.
 

@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 ///
 /// Só os módulos já construídos aparecem, e só para quem tem o papel
 /// certo (docs/12 seção 12: "nenhum operador acessa módulo fora de seu
-/// papel") — conteúdo, notificações e suporte ainda não existem (ver
+/// papel") — notificações e suporte ainda não existem (ver
 /// docs/IMPLEMENTATION_STATUS.md, "Próxima ação").
 class AdminHomePage extends ConsumerWidget {
   const AdminHomePage({super.key, required this.role});
@@ -23,6 +23,8 @@ class AdminHomePage extends ConsumerWidget {
         role == AdminRole.superAdmin || role == AdminRole.billing;
     final canSeeFamilies =
         role == AdminRole.superAdmin || role == AdminRole.support;
+    final canSeeThemes =
+        role == AdminRole.superAdmin || role == AdminRole.content;
 
     return Scaffold(
       backgroundColor: tokens.colorBackground,
@@ -81,11 +83,23 @@ class AdminHomePage extends ConsumerWidget {
                       onTap: () => context.push('/admin/families'),
                     ),
                   ),
-                if (!canSeeSubscriptions && !canSeeFamilies)
+                if (canSeeThemes)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.palette_outlined),
+                      title: const Text('Temas e conteúdo'),
+                      subtitle: const Text(
+                        'Catálogo de temas (rascunho/publicar/retirar) e '
+                        'fila de solicitações Premium de tema',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/admin/themes'),
+                    ),
+                  ),
+                if (!canSeeSubscriptions && !canSeeFamilies && !canSeeThemes)
                   const Text(
                     'Nenhum módulo disponível para o seu papel ainda — '
-                    'conteúdo, notificações e suporte chegam em próximas '
-                    'fatias.',
+                    'notificações e suporte chegam em próximas fatias.',
                     textAlign: TextAlign.center,
                   ),
               ],

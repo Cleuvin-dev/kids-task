@@ -53,9 +53,20 @@ void main() {
     expect(find.text('Famílias e usuários'), findsOneWidget);
   });
 
-  testWidgets('content não vê nenhum módulo e recebe a mensagem padrão', (
+  testWidgets('só content/super_admin veem o módulo Temas e conteúdo', (
     tester,
   ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: AdminHomePage(role: AdminRole.support)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Temas e conteúdo'), findsNothing);
+  });
+
+  testWidgets('content vê só o módulo Temas e conteúdo', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
         child: MaterialApp(home: AdminHomePage(role: AdminRole.content)),
@@ -65,6 +76,6 @@ void main() {
 
     expect(find.text('Assinaturas'), findsNothing);
     expect(find.text('Famílias e usuários'), findsNothing);
-    expect(find.textContaining('Nenhum módulo disponível'), findsOneWidget);
+    expect(find.text('Temas e conteúdo'), findsOneWidget);
   });
 }

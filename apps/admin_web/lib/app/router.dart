@@ -13,6 +13,7 @@ import '../features/mfa/admin_mfa_challenge_page.dart';
 import '../features/mfa/admin_mfa_enroll_page.dart';
 import '../features/subscriptions/admin_subscription_detail_page.dart';
 import '../features/subscriptions/admin_subscription_search_page.dart';
+import '../features/themes/admin_theme_catalog_page.dart';
 import '../features/unauthorized/admin_unauthorized_page.dart';
 import 'router_refresh_notifier.dart';
 
@@ -25,6 +26,10 @@ const _subscriptionModuleRoles = {AdminRole.superAdmin, AdminRole.billing};
 /// tem leitura entre famílias no banco só para o módulo Assinaturas, não
 /// ganha este módulo próprio).
 const _familyModuleRoles = {AdminRole.superAdmin, AdminRole.support};
+
+/// Papéis que enxergam o módulo "Temas e conteúdo" (docs/12 seção 2:
+/// content = "temas, assets, avatares e textos").
+const _themeModuleRoles = {AdminRole.superAdmin, AdminRole.content};
 
 /// Rotas do painel administrativo Web e guard único de autorização.
 ///
@@ -60,6 +65,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               _subscriptionModuleRoles.contains(role) ? null : '/admin/home',
             _ when loc.startsWith('/admin/families') =>
               _familyModuleRoles.contains(role) ? null : '/admin/home',
+            _ when loc.startsWith('/admin/themes') =>
+              _themeModuleRoles.contains(role) ? null : '/admin/home',
             _ => '/admin/home',
           },
         },
@@ -113,6 +120,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/admin/families/:familyId',
         builder: (context, state) =>
             AdminFamilyDetailPage(familyId: state.pathParameters['familyId']!),
+      ),
+      GoRoute(
+        path: '/admin/themes',
+        builder: (context, state) => const AdminThemeCatalogPage(),
       ),
     ],
   );
