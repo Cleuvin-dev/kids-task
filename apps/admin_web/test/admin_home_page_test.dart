@@ -77,5 +77,31 @@ void main() {
     expect(find.text('Assinaturas'), findsNothing);
     expect(find.text('Famílias e usuários'), findsNothing);
     expect(find.text('Temas e conteúdo'), findsOneWidget);
+    expect(find.text('Suporte'), findsNothing);
+  });
+
+  testWidgets('só support/super_admin veem o módulo Suporte', (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: AdminHomePage(role: AdminRole.billing)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Suporte'), findsNothing);
+  });
+
+  testWidgets('support vê os módulos Famílias e usuários e Suporte', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: AdminHomePage(role: AdminRole.support)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Famílias e usuários'), findsOneWidget);
+    expect(find.text('Suporte'), findsOneWidget);
   });
 }

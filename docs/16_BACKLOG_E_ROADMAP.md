@@ -121,8 +121,8 @@ de um projeto Firebase real.
 ## 9. Marco 7 — Premium e painel Web
 
 Parcial. Fatias 1 (backend de assinaturas), 2 (fundação do painel: login,
-MFA, auditoria), 3 (módulo Assinaturas), 4 (módulo Famílias e usuários) e
-5 (módulo Temas e conteúdo) concluídas — ver
+MFA, auditoria), 3 (módulo Assinaturas), 4 (módulo Famílias e usuários),
+5 (módulo Temas e conteúdo) e 6 (módulo Suporte) concluídas — ver
 `docs/IMPLEMENTATION_STATUS.md`.
 
 - [x] planos/entitlements — modelo de assinatura completo (`subscriptions`, `v_effective_entitlements`, `resolve_effective_plan_code`);
@@ -135,7 +135,7 @@ MFA, auditoria), 3 (módulo Assinaturas), 4 (módulo Famílias e usuários) e
 - [x] famílias/usuários — busca, detalhe (responsáveis, plano, crianças com identidade oculta por padrão e revelação justificada/auditada, aparelhos, consentimentos) e `admin_set_family_status` (docs/12 seção 11: motivo obrigatório, revoga aparelhos infantis, notifica responsáveis, auditado); o bloqueio do lado do responsável é aplicado pelo app móvel (`SessionRoleResolver`/`GuardianFamilyBlocked`), já que a sessão do Supabase Auth não pode ser revogada por uma função SQL comum;
 - [x] assinatura (módulo do painel — docs/12 seção 5): busca de família, plano efetivo, eventos, conceder/revogar override de suporte com expiração automática (`expire_support_overrides` via `pg_cron`);
 - [x] temas/conteúdo — catálogo administrado de ponta a ponta (criar rascunho, editar chave de asset, publicar com versionamento e confirmação de revisão de PI, retirar sem quebrar famílias atuais) e fila de solicitações Premium de tema; publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo) continua bloqueado só por falta de arte própria, não de mecanismo;
-- [ ] suporte;
+- [x] suporte — tickets com categoria/prioridade/timeline/resposta/encerramento e vínculo com incidente, sem impersonação (docs/12 seção 9); anexos privados adiados (primeiro upload de arquivo real do projeto, decisão técnica própria ainda não tomada);
 - [ ] métricas e auditoria.
 
 Saída: modelo de negócio operacional.

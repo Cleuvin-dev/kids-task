@@ -13,6 +13,8 @@ import '../features/mfa/admin_mfa_challenge_page.dart';
 import '../features/mfa/admin_mfa_enroll_page.dart';
 import '../features/subscriptions/admin_subscription_detail_page.dart';
 import '../features/subscriptions/admin_subscription_search_page.dart';
+import '../features/support/admin_support_ticket_detail_page.dart';
+import '../features/support/admin_support_ticket_list_page.dart';
 import '../features/themes/admin_theme_catalog_page.dart';
 import '../features/unauthorized/admin_unauthorized_page.dart';
 import 'router_refresh_notifier.dart';
@@ -30,6 +32,10 @@ const _familyModuleRoles = {AdminRole.superAdmin, AdminRole.support};
 /// Papéis que enxergam o módulo "Temas e conteúdo" (docs/12 seção 2:
 /// content = "temas, assets, avatares e textos").
 const _themeModuleRoles = {AdminRole.superAdmin, AdminRole.content};
+
+/// Papéis que enxergam o módulo "Suporte" (docs/12 seção 2: support =
+/// "suporte com dados mínimos").
+const _supportModuleRoles = {AdminRole.superAdmin, AdminRole.support};
 
 /// Rotas do painel administrativo Web e guard único de autorização.
 ///
@@ -67,6 +73,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               _familyModuleRoles.contains(role) ? null : '/admin/home',
             _ when loc.startsWith('/admin/themes') =>
               _themeModuleRoles.contains(role) ? null : '/admin/home',
+            _ when loc.startsWith('/admin/support') =>
+              _supportModuleRoles.contains(role) ? null : '/admin/home',
             _ => '/admin/home',
           },
         },
@@ -124,6 +132,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/themes',
         builder: (context, state) => const AdminThemeCatalogPage(),
+      ),
+      GoRoute(
+        path: '/admin/support',
+        builder: (context, state) => const AdminSupportTicketListPage(),
+      ),
+      GoRoute(
+        path: '/admin/support/:ticketId',
+        builder: (context, state) => AdminSupportTicketDetailPage(
+          ticketId: state.pathParameters['ticketId']!,
+        ),
       ),
     ],
   );

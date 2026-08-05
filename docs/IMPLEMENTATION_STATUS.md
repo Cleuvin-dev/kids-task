@@ -14,11 +14,13 @@ real — ver "Bloqueios"). Marco 7 — Premium e Painel iniciado
 Assinaturas (fatia 3: busca de família, plano efetivo, override de
 suporte), módulo "Famílias e usuários" (fatia 4: busca, detalhe com
 identidade infantil oculta por padrão, aparelhos, consentimentos e
-alteração de status com revogação de aparelhos infantis) e módulo "Temas e
+alteração de status com revogação de aparelhos infantis), módulo "Temas e
 conteúdo" (fatia 5: catálogo de temas — criar rascunho, editar, publicar
-versionado, retirar — e fila de solicitações Premium de tema) estão
-prontos; `apps/admin_web` ainda não tem notificações nem suporte. Este
-documento e o `git log` são a fonte de verdade do que já existe; ler esta
+versionado, retirar — e fila de solicitações Premium de tema) e módulo
+"Suporte" (fatia 6: tickets com categoria/prioridade/timeline/resposta/
+encerramento, sem impersonação) estão prontos; `apps/admin_web` ainda não
+tem notificações do painel. Este documento e o `git log` são a fonte de
+verdade do que já existe; ler esta
 seção e a "Próxima ação" antes de continuar.
 
 ## Repositório
@@ -256,6 +258,32 @@ distintas.
     Do mesmo jeito, licença/proveniência/contraste/acessibilidade/tamanho
     máximo são confirmados por revisão humana (checkbox obrigatório antes
     de publicar), não por um validador automático que não existe.
+- **Marco 7 (fatia 6)** — módulo "Suporte" (docs/12 seção 9), visível só
+  para `super_admin`/`support`:
+  - `/admin/support`: fila de tickets (assunto, categoria, prioridade,
+    status, ordenada por atividade mais recente) com "Novo ticket" —
+    família opcional (campo de ID; sem uma segunda busca dedicada, o
+    operador já teria o ID vindo do módulo Famílias e usuários),
+    categoria, prioridade e referência de incidente opcionais.
+  - `/admin/support/:ticketId`: visão geral (status/categoria/prioridade/
+    família/incidente), timeline de mensagens (`support_ticket_messages`)
+    com campo de resposta, e "Alterar status" (docs/12 seção 9:
+    encerramento e reabertura).
+  - `packages/data_access/src/admin/admin_support_repository.dart`:
+    `AdminSupportRepository` — sem RPC dedicada, lê/escreve
+    `support_tickets`/`support_ticket_messages` direto via RLS (docs/14
+    seção 1: sem regra de negócio crítica além de autorização, mesmo
+    padrão de `rewards`/`consent_records`).
+  - **Sem impersonação** (docs/12 seção 9): nenhuma tela ou função deste
+    módulo dá acesso à sessão de um responsável ou criança — um ticket só
+    referencia `family_id` para contexto, nunca abre a conta da família.
+  - **Simplificação registrada**: "anexos privados" (docs/12 seção 9) fica
+    fora desta fatia — seria o primeiro upload de arquivo de verdade do
+    projeto inteiro (nem `private_photo_path` do Marco 1 tem pipeline
+    real), decisão técnica própria (bucket do Storage, policies de
+    `storage.objects`, seletor de arquivo no Flutter Web) que não deveria
+    ser encaixada como sub-item desta entrega. A timeline cobre resposta
+    em texto sem anexo por enquanto.
 
 ### Backend (Supabase)
 
@@ -651,6 +679,39 @@ fatia (ver "Próxima ação").
   retirada (só a partir de publicado); fila de solicitações (join
   família/e-mail, rejeita revisar duas vezes); privilégio mínimo.
 
+### Backend do módulo Suporte (Marco 7, fatia 6)
+
+- Migrations (`supabase/migrations/202607311000{52..53}_*.sql`).
+- `support_tickets`/`support_ticket_messages`: RLS direta (sem função,
+  docs/14 seção 1 — mesmo padrão de `rewards`/`consent_records`), sem
+  nenhuma função PL/pgSQL chamável via RPC nesta fatia (a migration 53 só
+  reafirma o revoke defensivo de hábito; não há nada novo pra restringir).
+- `category`/`priority`/`status` são `check` na própria coluna, não
+  validação em função — `category` em (`billing`, `technical`, `account`,
+  `content`, `other`), `priority` em (`low`, `medium`, `high`, `urgent`),
+  `status` em (`open`, `in_progress`, `waiting_on_family`, `resolved`,
+  `closed`).
+- `sync_support_ticket_closed_at` (gatilho antes de `update` em
+  `support_tickets`): preenche `closed_at` ao entrar em `resolved`/
+  `closed`, limpa ao sair — nunca fica dessincronizado de um `update`
+  manual que esqueceu a coluna.
+- `touch_support_ticket_on_message` (gatilho depois de `insert` em
+  `support_ticket_messages`, `security definer` porque escreve numa tabela
+  diferente da que disparou o gatilho — mesmo motivo de
+  `create_child_wallet`/`create_child_streak` do Marco 1/4): toca
+  `support_tickets.updated_at` a cada mensagem nova, então a fila
+  (ordenada por `updated_at`) sobe o ticket com atividade recente.
+  `support_ticket_messages` é append-only (sem policy de update/delete),
+  mesmo padrão de `task_events`/`redemption_events` — é a própria timeline
+  que satisfaz "quem, quando, por quê" (docs/12 seção 12) para ações de
+  ticket, sem precisar também passar por `record_admin_audit_log`.
+- pgTAP: `supabase/tests/database/120_marco7_admin_support_test.sql`
+  (18 asserções) cobrindo: criação de ticket e RLS por papel (select/
+  insert, inclusive um responsável comum); timeline (mensagem aparece,
+  billing não pode escrever); `closed_at` sincroniza ao resolver/reabrir;
+  billing não pode alterar status; os três `check` de enum rejeitam valor
+  inválido; ticket sem família vinculada (consulta geral).
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -668,7 +729,7 @@ fatia (ver "Próxima ação").
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
-| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria), módulo Assinaturas, módulo Famílias e usuários e módulo Temas e conteúdo (catálogo de temas versionado + fila de solicitações Premium) prontos — ver seções acima. `apps/admin_web` ainda não tem notificações nem suporte |
+| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria), módulo Assinaturas, módulo Famílias e usuários, módulo Temas e conteúdo e módulo Suporte (tickets, sem impersonação, anexos privados adiados) prontos — ver seções acima. `apps/admin_web` ainda não tem notificações do painel |
 | 8 — Privacidade e release | Não iniciado | — |
 
 ## Testes (executados localmente em 05/08/2026)
@@ -677,8 +738,8 @@ fatia (ver "Próxima ação").
 |---|---|---|
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (7) | ✅ 61/61 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 3 migrations novas e o pgTAP do módulo Temas e conteúdo (33 asserções, total 304 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (9) | ✅ 63/63 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 2 migrations novas e o pgTAP do módulo Suporte (18 asserções, total 322 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
@@ -692,9 +753,10 @@ fatia (ver "Próxima ação").
    (`70_marco7_subscriptions_test.sql`), o de administradores da
    plataforma (`80_marco7_platform_admin_test.sql`), o do módulo
    Assinaturas do painel (`90_marco7_admin_subscriptions_test.sql`), o do
-   módulo Famílias e usuários (`100_marco7_admin_families_test.sql`) e o do
-   módulo Temas e conteúdo (`110_marco7_admin_themes_test.sql`), que só
-   serão confirmados quando rodarem em CI ou numa máquina com Docker.
+   módulo Famílias e usuários (`100_marco7_admin_families_test.sql`), o do
+   módulo Temas e conteúdo (`110_marco7_admin_themes_test.sql`) e o do
+   módulo Suporte (`120_marco7_admin_support_test.sql`), que só serão
+   confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` (e, desde a fatia 3 do Marco 7,
    também `20260731100042_admin_subscription_cron.sql`, que agenda
@@ -744,32 +806,36 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 (fatia 6) — Módulo "Suporte"** (docs/12 seção 9): login, MFA,
-auditoria (fatia 2), Assinaturas (fatia 3), Famílias e usuários (fatia 4)
-e Temas e conteúdo (fatia 5) estão prontos. Falta:
-- schema de tickets (categoria, prioridade, anexos privados, timeline,
-  resposta, encerramento, vínculo com incidente — nada disso existe ainda,
-  ao contrário de temas/assinaturas/famílias que já tinham alguma base do
-  app móvel para herdar);
-- explicitamente **sem impersonação** (docs/12 seção 9) — nenhuma
-  ferramenta de acesso assistido nesta fatia; se um dia existir, precisa de
-  consentimento, tempo limitado e auditoria destacada, não é o escopo
-  padrão de um ticket;
-- anexos privados exigem decidir armazenamento (Supabase Storage com
-  bucket privado, policy por ticket) — primeira vez que o painel precisa de
-  upload de arquivo de verdade (ao contrário do "editar chave de asset" da
-  fatia 5, que não subia nenhum arquivo).
+**Marco 7 (fatia 7) — "Notificações" do painel** (docs/12 seção 8): login,
+MFA, auditoria (fatia 2), Assinaturas (fatia 3), Famílias e usuários
+(fatia 4), Temas e conteúdo (fatia 5) e Suporte (fatia 6) estão prontos —
+todos os quatro papéis (`super_admin`/`billing`/`support`/`content`) já
+enxergam pelo menos um módulo. Falta:
+- templates e categorias de notificação (o Marco 6 só cobriu os pontos de
+  maior tráfego direto no código, sem nenhuma tela de configuração);
+- histórico de entrega e reprocessamento controlado — hoje `outbox_events`
+  (Marco 6) não tem nenhuma tela consumindo, só o worker futuro (ainda
+  bloqueado por falta de projeto Firebase, ver "Bloqueios");
+- avisos operacionais para responsáveis e teste para aparelhos internos
+  (docs/12 seção 8);
+- explicitamente **sem campanha de marketing direcionada a crianças no
+  MVP** (docs/12 seção 8) — nenhuma tela desta fatia deve abrir espaço
+  para isso.
 
 Publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo)
 continua bloqueado por falta de arte própria — a fatia 5 deixou o
 mecanismo pronto (`admin_publish_theme` já valida asset key e confirmação
-de PI), só falta o conteúdo em si.
+de PI), só falta o conteúdo em si. Anexos privados de ticket (fatia 6)
+seguem adiados até existir uma decisão própria de Supabase Storage.
 
-Depois: "Notificações" do painel (seção 8: templates, histórico de
-entrega, reprocessamento). "Gestão de papéis" (seção 2, `super_admin`
-promover outros administradores pela UI) continua sem prioridade definida
-— provisionar um admin é manual (abaixo) e nenhum módulo até agora
-dependeu disso de verdade.
+Depois: "Gestão de papéis" (seção 2, `super_admin` promover outros
+administradores pela UI) continua sem prioridade definida — provisionar um
+admin é manual (abaixo) e nenhum módulo até agora dependeu disso de
+verdade. Com Suporte, Temas, Famílias, Assinaturas e (depois desta fatia)
+Notificações prontos, o painel administrativo do Marco 7 estará
+funcionalmente completo pelas seções de docs/12 — restando decidir se
+"métricas e auditoria" (dashboard agregado, docs/12 seção 3) e "gestão de
+papéis" entram no MVP ou ficam pós-lançamento.
 
 Um administrador ainda precisa ser provisionado manualmente para testar
 qualquer módulo (`service_role`: criar o usuário no Supabase Auth e inserir

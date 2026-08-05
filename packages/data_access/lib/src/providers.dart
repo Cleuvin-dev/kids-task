@@ -7,6 +7,7 @@ import 'admin/admin_family_repository.dart';
 import 'admin/admin_mfa_repository.dart';
 import 'admin/admin_session_resolver.dart';
 import 'admin/admin_subscription_repository.dart';
+import 'admin/admin_support_repository.dart';
 import 'admin/admin_theme_repository.dart';
 import 'auth/guardian_auth_repository.dart';
 import 'auth/session_role_resolver.dart';
@@ -158,6 +159,10 @@ final adminFamilyRepositoryProvider = Provider<AdminFamilyRepository>(
 
 final adminThemeRepositoryProvider = Provider<AdminThemeRepository>(
   (ref) => AdminThemeRepository(ref.watch(supabaseClientProvider)),
+);
+
+final adminSupportRepositoryProvider = Provider<AdminSupportRepository>(
+  (ref) => AdminSupportRepository(ref.watch(supabaseClientProvider)),
 );
 
 final adminAuthStateChangesProvider = StreamProvider<AuthState>(

@@ -10,6 +10,7 @@ export 'src/admin/admin_family_repository.dart';
 export 'src/admin/admin_mfa_repository.dart';
 export 'src/admin/admin_session_resolver.dart';
 export 'src/admin/admin_subscription_repository.dart';
+export 'src/admin/admin_support_repository.dart';
 export 'src/admin/admin_theme_repository.dart';
 export 'src/auth/guardian_auth_repository.dart';
 export 'src/auth/session_role_resolver.dart';

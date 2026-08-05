@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 ///
 /// Só os módulos já construídos aparecem, e só para quem tem o papel
 /// certo (docs/12 seção 12: "nenhum operador acessa módulo fora de seu
-/// papel") — notificações e suporte ainda não existem (ver
+/// papel") — notificações do painel ainda não existem (ver
 /// docs/IMPLEMENTATION_STATUS.md, "Próxima ação").
 class AdminHomePage extends ConsumerWidget {
   const AdminHomePage({super.key, required this.role});
@@ -25,6 +25,8 @@ class AdminHomePage extends ConsumerWidget {
         role == AdminRole.superAdmin || role == AdminRole.support;
     final canSeeThemes =
         role == AdminRole.superAdmin || role == AdminRole.content;
+    final canSeeSupport =
+        role == AdminRole.superAdmin || role == AdminRole.support;
 
     return Scaffold(
       backgroundColor: tokens.colorBackground,
@@ -96,10 +98,26 @@ class AdminHomePage extends ConsumerWidget {
                       onTap: () => context.push('/admin/themes'),
                     ),
                   ),
-                if (!canSeeSubscriptions && !canSeeFamilies && !canSeeThemes)
+                if (canSeeSupport)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.support_agent_outlined),
+                      title: const Text('Suporte'),
+                      subtitle: const Text(
+                        'Tickets: categoria, prioridade, timeline e '
+                        'encerramento — sem impersonação',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/admin/support'),
+                    ),
+                  ),
+                if (!canSeeSubscriptions &&
+                    !canSeeFamilies &&
+                    !canSeeThemes &&
+                    !canSeeSupport)
                   const Text(
                     'Nenhum módulo disponível para o seu papel ainda — '
-                    'notificações e suporte chegam em próximas fatias.',
+                    'notificações do painel chegam em próxima fatia.',
                     textAlign: TextAlign.center,
                   ),
               ],
