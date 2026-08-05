@@ -9,12 +9,13 @@ Marco 5 — Temas e Experiência por Idade concluído. Marco 6 — Notificaçõe
 concluído **parcialmente** (central interna funciona de ponta a ponta;
 push de verdade via FCM/APNs está bloqueado por falta de projeto Firebase
 real — ver "Bloqueios"). Marco 7 — Premium e Painel iniciado
-**parcialmente**: backend de assinaturas (fatia 1) e fundação do painel
-Web — login separado + MFA obrigatório + auditoria (fatia 2) — estão
-prontos; `apps/admin_web` ainda não tem nenhum módulo (famílias, conteúdo,
-assinaturas, notificações, suporte). Este documento e o `git log` são a
-fonte de verdade do que já existe; ler esta seção e a "Próxima ação" antes
-de continuar.
+**parcialmente**: backend de assinaturas (fatia 1), fundação do painel Web
+— login separado + MFA obrigatório + auditoria (fatia 2) — e o primeiro
+módulo real, Assinaturas (fatia 3: busca de família, plano efetivo,
+override de suporte) estão prontos; `apps/admin_web` ainda não tem
+famílias/usuários, conteúdo, notificações nem suporte. Este documento e o
+`git log` são a fonte de verdade do que já existe; ler esta seção e a
+"Próxima ação" antes de continuar.
 
 ## Repositório
 
@@ -153,9 +154,10 @@ distintas.
   - `/admin/unauthorized`: conta autenticada sem vínculo ativo em
     `platform_admins` — estado explícito em vez de erro genérico (não
     deveria acontecer em uso normal, já que não há autocadastro).
-  - `/admin/home`: placeholder pós-login mostrando o papel do
-    administrador; nenhum módulo (famílias, conteúdo, assinaturas,
-    notificações, suporte) existe ainda — fica para as próximas fatias.
+  - `/admin/home`: pós-login, mostra o papel do administrador e um card de
+    navegação por módulo já pronto (só "Assinaturas" nesta fatia); papéis
+    sem nenhum módulo disponível veem uma mensagem em vez de uma tela
+    vazia.
   - Guard único em `go_router`, mesmo padrão do app móvel: `redirect`
     sempre lê `adminResolvedSessionProvider` (backend + estado de MFA da
     sessão) de forma síncrona, com `RouterRefreshNotifier` reagindo a
@@ -167,6 +169,25 @@ distintas.
     `AdminMfaChallengeRequired` / `AdminSession`, paralelo ao
     `SessionRoleResolver` do app móvel) e `AdminAuditLogRepository`
     (`record_admin_audit_log`). `packages/domain`: `AdminRole`.
+- **Marco 7 (fatia 3)** — primeiro módulo real, "Assinaturas" (docs/12
+  seção 5), visível só para `super_admin`/`billing` (`/admin/home` esconde
+  o card para os demais papéis; `redirect` também bloqueia navegação
+  direta pela URL):
+  - `/admin/subscriptions`: busca por ID da família ou e-mail do
+    responsável (nunca por código familiar, CLAUDE.md), lista família,
+    plano efetivo, e-mails dos responsáveis e quantidade de crianças.
+  - `/admin/subscriptions/:familyId`: plano efetivo, estado da assinatura,
+    loja/produto, validade/carência, eventos recentes
+    (`subscription_events`) e o botão de override — "Conceder override de
+    suporte" (data de expiração + justificativa obrigatória) quando a
+    família não está em override, "Revogar" (motivo obrigatório) quando
+    está. O texto do diálogo deixa explícito que não representa pagamento
+    real (docs/12 seção 5: "override não deve fingir pagamento").
+  - `packages/data_access/src/admin/admin_subscription_repository.dart`:
+    `AdminSubscriptionRepository` (busca, `v_effective_entitlements`,
+    `subscriptions`, `subscription_events`, conceder/revogar override) —
+    as duas últimas já gravam a própria auditoria no banco
+    (`record_admin_audit_log`), sem chamada duplicada do lado do Flutter.
 
 ### Backend (Supabase)
 
@@ -425,6 +446,50 @@ fatia (ver "Próxima ação").
   `audit_logs` (super_admin vê tudo, outro papel só as próprias ações);
   RLS de `platform_admins` (só a própria linha); privilégio mínimo.
 
+### Backend do módulo Assinaturas (Marco 7, fatia 3)
+
+- Migrations (`supabase/migrations/202607311000{39..43}_*.sql`).
+- `is_active_platform_admin(p_roles text[])`: bloco reaproveitável para RLS
+  entre famílias — só olha a própria linha do chamador em
+  `platform_admins`, então não precisa ser security definer. Base de
+  `families_select_admin` (`super_admin`/`support`/`billing`),
+  `subscriptions_select_admin`/`subscription_events_select_admin`
+  (`super_admin`/`billing` só — dado financeiro fica fora do papel
+  `support`, docs/12 seção 2). Como `v_effective_entitlements`
+  (fatia 1) já é `security_invoker`, essas duas policies bastam para o
+  admin consultar o plano efetivo de qualquer família sem view nova.
+- `admin_search_families` (security definer, docs/12 seção 4: "busca por
+  ID da família ou e-mail do responsável" — nunca por código familiar,
+  CLAUDE.md): só ela lê `auth.users` (e-mail não existe em nenhuma tabela
+  RLS-visível), por isso precisa ser security definer mesmo sendo só
+  leitura; limitada a 20 resultados, exige 3+ caracteres.
+- `admin_grant_subscription_override`/`admin_revoke_subscription_override`
+  (docs/12 seção 5: "override de suporte com expiração e justificativa";
+  "não deve fingir pagamento"): só mexem em `status`/`current_period_end`
+  — nunca em `store`/`product_id`/`original_transaction_id` — e
+  reaproveitam `apply_subscription_transition` (fatia 1, propaga o plano
+  efetivo e chama `apply_safe_downgrade`/`restore_paused_entitlements`
+  sozinho) e `record_admin_audit_log` (fatia 2), sem mecanismo novo de
+  nenhum dos dois. Ambas exigem `p_idempotency_key` (CLAUDE.md: "toda ação
+  crítica deve aceitar chave de idempotência"), verificada contra
+  `subscription_events.idempotency_key`. Simplificação registrada: revogar
+  (manual ou por expiração) sempre volta a `free`, não "o que a família
+  tinha antes do override" — cobrir uma assinatura real de loja coexistindo
+  com um override fica para quando o módulo de suporte precisar disso de
+  verdade.
+- `expire_support_overrides` (interna, só `service_role`, agendada de hora
+  em hora via `pg_cron`): garante o critério de aceite "override de
+  assinatura expira" (docs/15 seção 14) sem depender de um administrador
+  voltar à tela manualmente — mesmo padrão de `expire_due_task_occurrences`
+  do Marco 2.
+- pgTAP: `supabase/tests/database/90_marco7_admin_subscriptions_test.sql`
+  (32 asserções) cobrindo: RLS entre famílias restrita por papel; busca por
+  ID/e-mail, rejeição de busca curta e de papéis sem permissão; concessão
+  de override (controle de acesso, validação, idempotência, efeito no
+  plano da família, auditoria); revogação (inclusive rejeitar revogar uma
+  assinatura que não está em override); expiração automática; privilégio
+  mínimo.
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -442,7 +507,7 @@ fatia (ver "Próxima ação").
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
-| 7 — Premium e painel | **Parcial** | Backend de assinaturas completo e fundação do painel Web (login separado + MFA obrigatório + auditoria) prontos — ver seções acima. `apps/admin_web` ainda não tem nenhum módulo (famílias, conteúdo, assinaturas, notificações, suporte) |
+| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria) e primeiro módulo real (Assinaturas: busca de família, plano efetivo, override de suporte) prontos — ver seções acima. `apps/admin_web` ainda não tem famílias/usuários, conteúdo, notificações nem suporte |
 | 8 — Privacidade e release | Não iniciado | — |
 
 ## Testes (executados localmente em 05/08/2026)
@@ -451,8 +516,8 @@ fatia (ver "Próxima ação").
 |---|---|---|
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (1) | ✅ 55/55 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 3 migrations novas e o pgTAP de administradores da plataforma (13 asserções, total 207 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (3) | ✅ 57/57 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 5 migrations novas e o pgTAP do módulo Assinaturas (32 asserções, total 239 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
@@ -463,13 +528,16 @@ fatia (ver "Próxima ação").
    Marcos 2-7 foram revisadas manualmente com atenção a nomes de coluna,
    tipos e assinaturas, mas **não foram executadas** contra um Postgres
    real. Isso inclui o pgTAP de assinaturas
-   (`70_marco7_subscriptions_test.sql`) e o de administradores da
-   plataforma (`80_marco7_platform_admin_test.sql`), que só serão
-   confirmados quando rodarem em CI ou numa máquina com Docker.
+   (`70_marco7_subscriptions_test.sql`), o de administradores da
+   plataforma (`80_marco7_platform_admin_test.sql`) e o do módulo
+   Assinaturas do painel (`90_marco7_admin_subscriptions_test.sql`), que só
+   serão confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
-   `20260731100015_task_cron_jobs.sql` assume que a extensão está
-   disponível (padrão em projetos Supabase Cloud), mas isso só pode ser
-   verificado quando existir um projeto real (bloqueio 4 abaixo).
+   `20260731100015_task_cron_jobs.sql` (e, desde a fatia 3 do Marco 7,
+   também `20260731100042_admin_subscription_cron.sql`, que agenda
+   `expire_support_overrides`) assume que a extensão está disponível
+   (padrão em projetos Supabase Cloud), mas isso só pode ser verificado
+   quando existir um projeto real (bloqueio 4 abaixo).
 3. **Provedor de e-mail transacional não configurado** — `send-guardian-invite`
    cria o convite normalmente e retorna `email_delivery: "not_configured"` com
    o link para compartilhar manualmente. Documentado também em
@@ -513,19 +581,31 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 (fatia 3) — Primeiro módulo real do painel**: login separado,
-MFA obrigatório e auditoria (fatia 2, ver seção acima) estão prontos, assim
-como o backend de assinaturas (fatia 1). `/admin/home` ainda é um
-placeholder sem nenhum módulo. Sugestão de ordem, seguindo docs/12: (1)
-"Famílias e usuários" (seção 4) — busca por família/e-mail, status, plano,
-responsáveis, quantidade de crianças, sem expor dado infantil por padrão
-(seção 3: "não mostrar nomes de crianças no dashboard") — é o módulo que
-mais depende do `super_admin` já poder promover outros administradores, o
-que ainda não existe (gestão de papéis, seção 2, também pendente); (2)
-"Assinaturas" (seção 5), que já tem backend completo (fatia 1) só faltando
-UI — plano efetivo, loja, estado, override de suporte com expiração.
-Cada módulo novo que gravar algo deve chamar `record_admin_audit_log`
-(fatia 2) em vez de inventar outro mecanismo de auditoria.
+**Marco 7 (fatia 4) — Módulo "Famílias e usuários"** (docs/12 seção 4):
+login, MFA, auditoria (fatia 2) e Assinaturas (fatia 3) estão prontos.
+A fundação para este módulo já existe — `families_select_admin`
+(`super_admin`/`support`/`billing`) e `admin_search_families` (fatia 3) já
+cobrem a busca por família/e-mail e os campos básicos (status, plano,
+responsáveis, quantidade de crianças) — falta:
+- RLS admin para o que a tela de detalhe precisa além disso:
+  `child_device_bindings` (aparelhos ativos) e `consent_records`
+  (consentimentos), hoje só visíveis à própria família;
+- `admin_set_family_status` (docs/12 seção 11: bloquear/restringir exige
+  motivo, não apaga dado, revoga/restringe sessão, notifica quando
+  apropriado, é reversível e auditado — reaproveitar
+  `record_admin_audit_log` e, para notificar, `emit_notification` do
+  Marco 6) — os quatro estados além de `active`/`deleted` já existem no
+  `check` de `families.status` desde o Marco 1;
+- não esconder nome de criança por padrão fora de uma ação de suporte
+  justificada (docs/12 seção 4: "dados infantis ficam ocultos até uma ação
+  justificada de suporte" — `admin_search_families` de hoje nem devolve
+  dado de criança, então isso é sobretudo para a tela de detalhe).
+
+Depois: "Temas e conteúdo" (seção 6, inclui publicar os temas `draft` do
+Marco 5) e "Suporte" (seção 9). "Gestão de papéis" (seção 2, `super_admin`
+promover outros administradores pela UI) continua sem prioridade definida
+— provisionar um admin é manual (abaixo) e nenhum módulo até agora
+dependeu disso de verdade.
 
 Um administrador ainda precisa ser provisionado manualmente para testar
 qualquer módulo (`service_role`: criar o usuário no Supabase Auth e inserir

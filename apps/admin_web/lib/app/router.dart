@@ -9,8 +9,14 @@ import '../features/access/admin_sign_in_page.dart';
 import '../features/home/admin_home_page.dart';
 import '../features/mfa/admin_mfa_challenge_page.dart';
 import '../features/mfa/admin_mfa_enroll_page.dart';
+import '../features/subscriptions/admin_subscription_detail_page.dart';
+import '../features/subscriptions/admin_subscription_search_page.dart';
 import '../features/unauthorized/admin_unauthorized_page.dart';
 import 'router_refresh_notifier.dart';
+
+/// Papéis que enxergam o módulo "Assinaturas" (docs/12 seção 2: billing =
+/// "planos, produtos e assinaturas"; super_admin sempre tem visão geral).
+const _subscriptionModuleRoles = {AdminRole.superAdmin, AdminRole.billing};
 
 /// Rotas do painel administrativo Web e guard único de autorização.
 ///
@@ -40,8 +46,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             loc == '/admin/mfa/enroll' ? null : '/admin/mfa/enroll',
           AdminMfaChallengeRequired() =>
             loc == '/admin/mfa/challenge' ? null : '/admin/mfa/challenge',
-          AdminSession() =>
-            loc.startsWith('/admin/home') ? null : '/admin/home',
+          AdminSession(:final role) => switch (loc) {
+            _ when loc.startsWith('/admin/home') => null,
+            _ when loc.startsWith('/admin/subscriptions') =>
+              _subscriptionModuleRoles.contains(role) ? null : '/admin/home',
+            _ => '/admin/home',
+          },
         },
       );
     },
@@ -70,6 +80,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/admin/home',
         builder: (context, state) => AdminHomePage(role: _currentRole(ref)!),
+      ),
+      GoRoute(
+        path: '/admin/subscriptions',
+        builder: (context, state) => const AdminSubscriptionSearchPage(),
+      ),
+      GoRoute(
+        path: '/admin/subscriptions/:familyId',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return AdminSubscriptionDetailPage(
+            familyId: state.pathParameters['familyId']!,
+            familyName: extra?['familyName'] as String?,
+          );
+        },
       ),
     ],
   );

@@ -120,8 +120,9 @@ de um projeto Firebase real.
 
 ## 9. Marco 7 — Premium e painel Web
 
-Parcial. Fatia 1 (backend de assinaturas) concluída — ver
-`docs/IMPLEMENTATION_STATUS.md`. Falta tudo o que é painel Web em si.
+Parcial. Fatias 1 (backend de assinaturas), 2 (fundação do painel: login,
+MFA, auditoria) e 3 (módulo Assinaturas) concluídas — ver
+`docs/IMPLEMENTATION_STATUS.md`.
 
 - [x] planos/entitlements — modelo de assinatura completo (`subscriptions`, `v_effective_entitlements`, `resolve_effective_plan_code`);
 - [x] produtos de loja — `subscription_products`, mapeamento versionado store+product_id→plano;
@@ -129,9 +130,9 @@ Parcial. Fatia 1 (backend de assinaturas) concluída — ver
 - [x] validação backend — `verify_purchase` (máquina de estados real; validação criptográfica contra a loja em si continua bloqueada por falta de conta de desenvolvedor, docs/18 seção 5);
 - [x] webhooks — `handle_apple_notification`/`handle_google_notification`, idempotentes e com detecção de evento fora de ordem; nenhuma Edge Function de recepção/validação de assinatura foi criada ainda;
 - [x] downgrade seguro — `apply_safe_downgrade`/`restore_paused_entitlements`, testado (docs/02 seção 5);
-- [x] painel com MFA — fundação pronta: login separado, `platform_admins`, MFA obrigatório (TOTP) e auditoria (`record_admin_audit_log`); nenhum módulo do painel existe ainda;
-- [ ] famílias/usuários;
-- [ ] assinatura (módulo do painel — ver docs/12 seção 5, distinto do backend acima);
+- [x] painel com MFA — fundação pronta: login separado, `platform_admins`, MFA obrigatório (TOTP) e auditoria (`record_admin_audit_log`);
+- [ ] famílias/usuários — RLS de leitura entre famílias (`families_select_admin`, `is_active_platform_admin`) e busca (`admin_search_families`) já prontas desde a fatia 3, faltam aparelhos/consentimentos e bloquear/restringir família (docs/12 seção 11);
+- [x] assinatura (módulo do painel — docs/12 seção 5): busca de família, plano efetivo, eventos, conceder/revogar override de suporte com expiração automática (`expire_support_overrides` via `pg_cron`);
 - [ ] temas/conteúdo — inclui publicar os temas `draft` do Marco 5;
 - [ ] suporte;
 - [ ] métricas e auditoria.

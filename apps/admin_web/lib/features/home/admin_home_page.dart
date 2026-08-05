@@ -7,9 +7,10 @@ import 'package:go_router/go_router.dart';
 
 /// Início do painel administrativo depois de login + MFA verificados.
 ///
-/// Só a fundação nesta fatia (docs/12): sem dashboard, famílias, conteúdo,
-/// assinaturas nem suporte ainda — cada um chega numa fatia futura do
-/// Marco 7 (ver docs/IMPLEMENTATION_STATUS.md, "Próxima ação").
+/// Só os módulos já construídos aparecem, e só para quem tem o papel
+/// certo (docs/12 seção 12: "nenhum operador acessa módulo fora de seu
+/// papel") — famílias/usuários, conteúdo, notificações e suporte ainda
+/// não existem (ver docs/IMPLEMENTATION_STATUS.md, "Próxima ação").
 class AdminHomePage extends ConsumerWidget {
   const AdminHomePage({super.key, required this.role});
 
@@ -18,6 +19,9 @@ class AdminHomePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.kidsTaskTokens;
+    final canSeeSubscriptions =
+        role == AdminRole.superAdmin || role == AdminRole.billing;
+
     return Scaffold(
       backgroundColor: tokens.colorBackground,
       appBar: AppBar(
@@ -35,23 +39,42 @@ class AdminHomePage extends ConsumerWidget {
         ],
       ),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Conectado como ${_roleLabel(role)}',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Login e verificação em duas etapas concluídos. Os módulos '
-                'do painel (famílias, conteúdo, assinaturas, notificações e '
-                'suporte) chegam nas próximas fatias do Marco 7.',
-                textAlign: TextAlign.center,
-              ),
-            ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Conectado como ${_roleLabel(role)}',
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                if (canSeeSubscriptions)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.workspace_premium_outlined),
+                      title: const Text('Assinaturas'),
+                      subtitle: const Text(
+                        'Buscar família, ver plano efetivo e conceder/'
+                        'revogar override de suporte',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/admin/subscriptions'),
+                    ),
+                  ),
+                if (!canSeeSubscriptions)
+                  const Text(
+                    'Nenhum módulo disponível para o seu papel ainda — '
+                    'famílias, conteúdo, notificações e suporte chegam em '
+                    'próximas fatias.',
+                    textAlign: TextAlign.center,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
