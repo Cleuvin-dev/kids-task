@@ -195,7 +195,11 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
             icon: const Icon(Icons.notifications_outlined),
             tooltip: 'Notificações',
           ),
-          IconButton(onPressed: _signOut, icon: const Icon(Icons.logout)),
+          IconButton(
+            onPressed: _signOut,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sair',
+          ),
         ],
       ),
       body: RefreshIndicator(
@@ -214,6 +218,8 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
                   _buildRewardsCard(),
                   const SizedBox(height: 16),
                   _buildThemeCard(),
+                  const SizedBox(height: 16),
+                  _buildPrivacyCard(),
                   const SizedBox(height: 16),
                   _buildFamilyCodeCard(),
                   const SizedBox(height: 16),
@@ -283,6 +289,20 @@ class _GuardianHomePageState extends ConsumerState<GuardianHomePage> {
           onPressed: _changeAppTheme,
           child: const Text('Trocar'),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPrivacyCard() {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.privacy_tip_outlined),
+        title: const Text('Privacidade'),
+        subtitle: const Text(
+          'Ver/exportar dados, consentimentos e excluir a família',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/guardian/privacy'),
       ),
     );
   }

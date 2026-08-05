@@ -13,6 +13,7 @@ import '../features/child_home/child_home_page.dart';
 import '../features/guardian_home/child_detail_page.dart';
 import '../features/guardian_home/child_theme_page.dart';
 import '../features/guardian_home/guardian_home_page.dart';
+import '../features/guardian_home/guardian_privacy_page.dart';
 import '../features/child_home/child_rewards_page.dart';
 import '../features/guardian_rewards/guardian_reward_list_page.dart';
 import '../features/guardian_rewards/pending_redemptions_page.dart';
@@ -198,6 +199,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/guardian/notifications',
             builder: (context, state) => const NotificationCenterPage(),
+          ),
+          GoRoute(
+            path: '/guardian/privacy',
+            builder: (context, state) =>
+                GuardianPrivacyPage(familyId: _currentFamilyId(ref)!),
           ),
           GoRoute(
             path: '/guardian/theme-requests/new',

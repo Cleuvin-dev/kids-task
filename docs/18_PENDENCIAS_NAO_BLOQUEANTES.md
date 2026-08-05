@@ -136,6 +136,46 @@ Pendências específicas do painel administrativo (Marco 7, fatias 4-7 —
   o mecanismo do painel já existe (Marco 7 fatia 5), só falta a arte
   (seção 2 acima).
 
+Pendências específicas do Marco 8 — Privacidade e release
+(`docs/IMPLEMENTATION_STATUS.md`):
+
+- Janelas de retenção técnicas implementadas como default, pendentes de
+  validação jurídica (docs/10 seção 13; seção 6 acima): convite não aceito/
+  cancelado/expirado — 30 dias; tentativa de login infantil — 90 dias;
+  token de push inativo — 30 dias; período de segurança de exclusão — 7
+  dias (já sugerido em docs/10 seção 10, não inventado aqui). Trocar
+  qualquer uma é editar a função correspondente
+  (`purge_stale_operational_data`/`request_family_deletion`), não uma
+  migration de schema;
+- Escopo exato de "apagar ou anonimizar" na exclusão de família (docs/10
+  seção 11) — o default técnico adotado (`process_scheduled_deletions`)
+  anonimiza identidade da criança (nome, apelido, foto, PIN) e mantém
+  ledgers/eventos financeiros/de auditoria intocados (não têm nome, só
+  `child_id`); confirmar com jurídico se isso satisfaz a obrigação legal
+  ou se algo mais precisa ser apagado;
+- Confirmação por e-mail ao concluir a exclusão (docs/10 seção 10, passo
+  9) não é enviada — depende do provedor de e-mail transacional (seção 4
+  acima), mesma pendência já registrada para convites;
+- Reautenticação de senha antes de solicitar exclusão (docs/10 seção 10,
+  caminho de responsável único) não é forçada pelo backend — o app usa
+  uma confirmação explícita forte (checkbox + explicação), não uma
+  verificação de senha nova; revisar se isso é suficiente ou se merece
+  reautenticação real numa fatia futura;
+- Testes E2E (`apps/mobile/integration_test/`): infraestrutura pronta
+  (pacote `integration_test`, um smoke test real), mas fluxos além da
+  tela de acesso comum exigem um projeto Supabase real para exercitar de
+  ponta a ponta — mesmo bloqueio de sempre;
+- Auditoria de acessibilidade completa (WCAG AA, leitor de tela, navegação
+  por teclado no painel Web) não foi feita com ferramentas reais de
+  acessibilidade — só uma revisão de código (tooltips de `IconButton`
+  ausentes corrigidos, docs/06 seção 9). Recomenda-se uma passada com
+  TalkBack/VoiceOver e um leitor de tela no navegador antes do
+  lançamento;
+- Pentest externo — a auto-revisão desta fatia é uma revisão de código
+  (RLS, ordem de checagem de autorização, isolamento entre famílias), não
+  substitui um pentest de verdade contra um ambiente real (docs/15 seção
+  1: "Segurança | enumeração, rate limit, acesso cruzado").
+
 ## 8. Decisões que não estão pendentes
 
 Não reabrir sem solicitação do proprietário:

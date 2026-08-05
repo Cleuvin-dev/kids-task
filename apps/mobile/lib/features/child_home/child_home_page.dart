@@ -145,10 +145,12 @@ class _ChildHomePageState extends ConsumerState<ChildHomePage> {
                   IconButton(
                     onPressed: () => context.push('/child/notifications'),
                     icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'Notificações',
                   ),
                   IconButton(
                     onPressed: _requestExit,
                     icon: const Icon(Icons.logout),
+                    tooltip: 'Sair',
                   ),
                 ],
               ),

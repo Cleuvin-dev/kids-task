@@ -46,8 +46,15 @@ class _ConsentPageState extends State<ConsentPage> {
                       'nascimento é usada apenas para calcular idade, faixa de '
                       'apresentação e bônus de aniversário — nunca é exibida '
                       'publicamente nem enviada em notificações.\n\n'
-                      'Você pode consultar, corrigir, exportar ou excluir esses '
-                      'dados a qualquer momento na área "Mais > Privacidade".',
+                      'Mantemos esses dados enquanto sua família usar o app. '
+                      'Não compartilhamos dados com terceiros para '
+                      'publicidade, e não há venda de dados. Provedores '
+                      'técnicos (hospedagem e, quando configurado, envio de '
+                      'e-mail e notificações) processam dados só para operar '
+                      'o serviço.\n\n'
+                      'Você pode consultar, corrigir, exportar, revogar este '
+                      'consentimento ou excluir esses dados a qualquer '
+                      'momento em "Início > Privacidade".',
                     ),
                   ],
                 ),

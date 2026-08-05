@@ -22,7 +22,17 @@ externa (projeto Firebase, decisão de Supabase Storage) — ver "Bloqueios"
 e as notas de cada fatia abaixo. "Gestão de papéis" (docs/12 seção 2) e
 publicar os temas `draft` do Marco 5 (falta de arte própria) ficam como
 pendências não bloqueantes, registradas em
-`docs/18_PENDENCIAS_NAO_BLOQUEANTES.md`. Este documento e o `git log` são a fonte de
+`docs/18_PENDENCIAS_NAO_BLOQUEANTES.md`. **Marco 8 — Privacidade e release
+concluído** (com o mesmo espírito dos Marcos 5-7: tudo que é engenharia
+foi entregue; itens que dependem de advogado, contas reais de loja ou
+ambiente de produção ficam registrados como pendência, nunca fingidos):
+fluxo de exclusão dupla da família, exportação de dados, revogação de
+consentimento, retenção técnica automatizada, revisão de consentimento/
+SDKs, auto-revisão de segurança (achado real corrigido), auditoria de
+acessibilidade (achados reais corrigidos), scaffold de testes E2E e
+runbooks operacionais. Revisão jurídica, TestFlight/contas de loja reais,
+categoria Kids/Families oficial e pentest externo continuam pendentes —
+não são tarefas de engenharia. Este documento e o `git log` são a fonte de
 verdade do que já existe; ler esta
 seção e a "Próxima ação" antes de continuar.
 
@@ -785,6 +795,156 @@ fatia (ver "Próxima ação").
   (9 asserções: controle de acesso só `super_admin`, métricas batendo com
   dados criados na própria transação de teste).
 
+## Marco 8 — Privacidade e release
+
+Diferente dos Marcos 1-7 (código sobre uma base que já existia), o
+Marco 8 mistura itens de engenharia com itens que só advogado/conta real
+de loja resolvem. Todo item de engenharia do checklist (docs/16 seção 10)
+foi construído; os que não são engenharia estão registrados em
+`docs/18_PENDENCIAS_NAO_BLOQUEANTES.md`, nunca fingidos como prontos.
+
+### Backend (Supabase)
+
+- Migrations (`supabase/migrations/202607311000{59..65}_*.sql`).
+- `deletion_requests` (docs/09 seção 8, docs/10 seção 10): "dupla" é sobre
+  aprovação, não sobre duas exclusões — com 2+ responsáveis ativos no
+  momento do pedido, um pede e outro aprova/rejeita; com um só, a
+  confirmação forte do próprio já basta (`requires_second_approval`
+  registra qual caminho valeu, snapshot no momento do pedido). Índice
+  parcial único garante no máximo um pedido "em jogo"
+  (`pending_approval`/`approved`) por família, sem impedir um novo pedido
+  depois de uma rejeição/cancelamento.
+- `request_family_deletion`/`respond_family_deletion`/
+  `cancel_family_deletion` (`authenticated`, idempotência no pedido
+  inicial): notificam via `emit_notification` (Marco 6) nos pontos certos
+  — o outro responsável ao pedir, o solicitante ao ser respondido, todos
+  ao cancelar. **Achado da auto-revisão de segurança desta fatia**: as
+  duas primeiras versões de `respond_family_deletion`/
+  `cancel_family_deletion` checavam o *status* do pedido antes de checar
+  se quem chamou pertence à família — um responsável de outra família
+  descobriria o estado de um pedido alheio antes de levar `FORBIDDEN`.
+  Corrigido invertendo a ordem (autorização sempre antes de qualquer
+  detalhe de estado) e coberto por um teste de isolamento entre famílias
+  novo no pgTAP (docs/15 seção 16).
+- `process_scheduled_deletions` (`service_role`/`pg_cron`, horário, mesmo
+  padrão de `expire_due_task_occurrences`/`expire_support_overrides`):
+  executa a exclusão de verdade quando o período de segurança de 7 dias
+  termina — revoga aparelhos infantis, anonimiza identidade da criança
+  (nome/apelido/foto/PIN), arquiva tarefas, remove o vínculo dos
+  responsáveis, marca a família `deleted`. Ledgers/eventos (histórico
+  financeiro/auditoria) ficam intocados — não carregam nome, só
+  `child_id`. Escopo exato de anonimização é o default técnico adotado,
+  pendente de validação jurídica (docs/18 seção 7). Sem notificação de
+  conclusão nem e-mail: no momento em que a família some de
+  `family_members`, a policy de leitura de `notifications` do responsável
+  já não alcança mais nada dela, e não há provedor de e-mail configurado
+  (pendência já existente desde o Marco 1).
+- `export_family_data` (`authenticated`, docs/10 seção 12): devolve num
+  único `jsonb` os dados da *própria* família de quem chama — família
+  deriva da sessão, nunca de um parâmetro (não dá pra pedir a exportação
+  de outra família por engano ou má-fé). Cobre família, responsáveis
+  (e-mail/papel), crianças (perfil completo, exceto `pin_hash` — nunca sai
+  do digest, docs/10 seção 8), carteira, até 200 lançamentos recentes do
+  ledger de moedas, recompensas, pedidos de resgate, consentimentos e
+  assinatura.
+- `revoke_consent` (`authenticated`) — achado da revisão de consentimento
+  (docs/10 seção 4: "permitir consulta e revogação"): `consent_records`
+  já tinha `status`/`revoked_at` desde o Marco 1, mas nenhuma função
+  escrevia neles — só o registro inicial existia. Fechado nesta fatia.
+- `purge_stale_operational_data` (`service_role`/`pg_cron`, diária,
+  docs/10 seção 13): convite não aceito/cancelado/expirado (30 dias),
+  tentativa de login infantil (90 dias), token de push inativo (30 dias).
+  Janelas são o default técnico adotado, pendente de validação jurídica
+  (docs/18 seção 7) — trocar é editar a função, não uma migration de
+  schema.
+- pgTAP: `supabase/tests/database/150_marco8_deletion_and_privacy_test.sql`
+  (32 asserções) cobrindo: pedido com dois responsáveis (pendente,
+  segundo notificado, segundo pedido bloqueado enquanto o primeiro está
+  em aberto); resposta (quem pediu não pode responder, rejeitar exige
+  motivo, aprovar agenda); **isolamento entre famílias** (responsável de
+  família B não enxerga nem age sobre pedido da família A); cancelamento
+  (e rejeição de cancelar duas vezes); caminho de responsável único
+  (aprova direto, já agendado); idempotência do pedido; execução real de
+  `process_scheduled_deletions` (família marcada `deleted`, criança
+  anonimizada, responsável perde vínculo, pedido `completed`);
+  `export_family_data` (dados da própria família, `FORBIDDEN` para quem
+  não é responsável de nenhuma); `revoke_consent` (revoga, rejeita
+  revogar duas vezes, `FORBIDDEN` para quem não é da família);
+  `purge_stale_operational_data` (remove o velho, preserva o recente).
+
+### apps/mobile
+
+- `/guardian/privacy` (docs/10 seção 12: "ver dados, corrigir, exportar,
+  retirar foto, revogar aparelhos, consultar consentimentos, solicitar
+  exclusão, acessar canal de privacidade" — corrigir/retirar foto/revogar
+  aparelho já existiam em outras telas desde o Marco 1; esta tela cobre o
+  resto): exportar dados (mostra o JSON, com botão copiar — mesmo padrão
+  de "exportação via clipboard" já usado no log de auditoria do painel,
+  Marco 7 fatia 7, para não depender de API de download específica do
+  Flutter Web/mobile sem navegador real pra testar aqui); consentimentos
+  com botão revogar; solicitar/aprovar/rejeitar/cancelar exclusão da
+  família, com textos diferentes conforme o pedido existe ou não e quem é
+  o solicitante. Card de acesso novo em `guardian_home_page.dart`.
+- `packages/data_access/src/privacy/privacy_repository.dart`:
+  `PrivacyRepository`.
+- `consent_page.dart` (revisão de consentimento, docs/10 seção 4):
+  adicionado texto sobre retenção ("enquanto sua família usar o app") e
+  terceiros ("sem venda de dados, sem terceiros para publicidade"), que
+  faltavam; referência corrigida de "Mais > Privacidade" (hub que nunca
+  existiu) para "Início > Privacidade" (onde a tela realmente está).
+  Identificação do controlador/contato de privacidade (docs/10 seção 4,
+  item 1) e explicação infantil curta no ambiente da criança (item 6)
+  **não foram adicionadas** — a primeira depende de dados que ainda não
+  existem (razão social, contato — docs/18 seção 4); a segunda ficou fora
+  desta passada para não arriscar uma tela já testada do Marco 1
+  (`child_home_page.dart`) sem tempo de validar visualmente — registrada
+  em docs/18 seção 7.
+- Acessibilidade: 3 `IconButton` sem `tooltip` (inacessíveis a leitor de
+  tela) corrigidos — `child_home_page.dart` (notificações, sair) e
+  `guardian_home_page.dart` (sair). Os outros ~15 `IconButton` do app já
+  tinham `tooltip`; o painel administrativo (`apps/admin_web`) já estava
+  100% coberto antes desta fatia.
+- `integration_test/app_test.dart` (docs/15 seção 1: "Integração Flutter"):
+  scaffold real com o pacote `integration_test`, um smoke test que abre o
+  app e confirma a tela de acesso comum — mesmo teste de
+  `test/widget_test.dart`, mas executável num dispositivo/emulador de
+  verdade via `flutter test integration_test`, não só no sandbox do
+  `flutter_test`. Fluxos além da tela de acesso (onboarding, tarefas,
+  aprovação) exigem um projeto Supabase real para exercitar de ponta a
+  ponta — mesmo bloqueio de sempre.
+
+### Runbooks
+
+- `docs/21_RUNBOOKS_OPERACIONAIS.md` (novo): backup/restauração,
+  provisionamento do primeiro administrador, resposta a incidentes
+  (aplicando o plano mínimo de docs/10 seção 14 aos mecanismos reais do
+  projeto — `audit_logs`, `platform_admins.active`,
+  `revoke_child_device`/`admin_set_family_status`), deploy/rollback,
+  checklist de release (aponta para docs/10 seção 16 e docs/15 seções
+  16-17 em vez de duplicar).
+
+### Desempenho (docs/15 seção 15: "listas paginadas")
+
+Revisão leve de código (sem dispositivo/ambiente real pra medir de
+verdade — registrado em docs/18 seção 7): três listas sem `.limit()`
+encontradas e corrigidas — `WalletRepository.listLedger` (histórico de
+KidsCoins) e `RedemptionRepository.listForChild`/`listForFamily`
+(histórico de resgates), todas cresciam sem parar ao longo dos anos de
+uso de uma família ativa. As demais listas do app já eram naturalmente
+pequenas (catálogo de temas/tarefas fixo, tarefas do dia, aprovações
+pendentes) ou já tinham `.limit()` desde que foram criadas (histórico de
+notificações, log de auditoria do painel).
+
+### Revisão de SDKs (docs/10 seção 15, docs/15 seção 1)
+
+Dependências de terceiros de `apps/mobile`/`apps/admin_web`/
+`packages/data_access`: `flutter_riverpod`, `go_router`, `intl`,
+`cupertino_icons`, `shared_preferences` (só `admin_web`), `supabase_flutter`
+(o próprio backend, não um terceiro de rastreamento). **Nenhum SDK de
+anúncios, analytics ou crash reporting de terceiro** — CLAUDE.md seção 5
+("não incluir SDK de anúncios"; "evitar analytics de terceiros no
+ambiente infantil") totalmente respeitado, sem precisar remover nada.
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -803,7 +963,7 @@ fatia (ver "Próxima ação").
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
 | 7 — Premium e painel | **Concluído** | Backend de assinaturas, fundação do painel Web, módulos Assinaturas/Famílias e usuários/Temas e conteúdo/Suporte/Notificações e dashboard de métricas + log de auditoria prontos — ver seções acima. Lacunas conhecidas (não bloqueiam a conclusão do marco, mesmo espírito do Marco 5/6): push real, templates/reprocessamento de notificação e anexos privados de ticket bloqueados por infraestrutura externa; gestão de papéis e publicar temas `draft` são pendências não bloqueantes (docs/18) |
-| 8 — Privacidade e release | Não iniciado | — |
+| 8 — Privacidade e release | **Concluído** | Fluxo de exclusão dupla, exportação de dados, retenção, revogação de consentimento, revisão de SDKs/segurança/acessibilidade/desempenho e runbooks prontos — ver seção "Marco 8" acima. Google Play Families, App Store Kids, TestFlight e revisão jurídica não são tarefas de engenharia — pendências registradas em docs/18 |
 
 ## Testes (executados localmente em 05/08/2026)
 
@@ -812,7 +972,8 @@ fatia (ver "Próxima ação").
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
 | `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (11) | ✅ 65/65 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 5 migrations novas e o pgTAP dos módulos Notificações/Dashboard (22 asserções, total 344 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test integration_test` | apps/mobile | ⛔ Pacote configurado e smoke test escrito; não executado nesta máquina de forma estável (emulador Android disponível, mas o processo não permaneceu de pé entre chamadas de ferramenta neste ambiente) — ver docs/18 seção 7 |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 7 migrations novas do Marco 8 e o pgTAP de exclusão dupla/exportação/retenção (32 asserções, total 376 nos Marcos 2-8) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
@@ -830,14 +991,19 @@ fatia (ver "Próxima ação").
    módulo Temas e conteúdo (`110_marco7_admin_themes_test.sql`), o do
    módulo Suporte (`120_marco7_admin_support_test.sql`) e os dos módulos
    Notificações/Dashboard (`130_marco7_admin_notifications_test.sql`,
-   `140_marco7_admin_dashboard_test.sql`), que só serão confirmados quando
-   rodarem em CI ou numa máquina com Docker.
+   `140_marco7_admin_dashboard_test.sql`) e o do Marco 8
+   (`150_marco8_deletion_and_privacy_test.sql`), que só serão confirmados
+   quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` (e, desde a fatia 3 do Marco 7,
    também `20260731100042_admin_subscription_cron.sql`, que agenda
-   `expire_support_overrides`) assume que a extensão está disponível
-   (padrão em projetos Supabase Cloud), mas isso só pode ser verificado
-   quando existir um projeto real (bloqueio 4 abaixo).
+   `expire_support_overrides`; e, desde o Marco 8,
+   `20260731100061_deletion_privileges_and_cron.sql`/
+   `20260731100064_privacy_function_privileges_and_cron.sql`, que agendam
+   `process_scheduled_deletions`/`purge_stale_operational_data`) assume
+   que a extensão está disponível (padrão em projetos Supabase Cloud), mas
+   isso só pode ser verificado quando existir um projeto real (bloqueio 4
+   abaixo).
 3. **Provedor de e-mail transacional não configurado** — `send-guardian-invite`
    cria o convite normalmente e retorna `email_delivery: "not_configured"` com
    o link para compartilhar manualmente. Documentado também em
@@ -881,63 +1047,52 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 está concluído.** Todas as sete fatias (backend de assinaturas;
-fundação do painel com MFA/auditoria; módulos Assinaturas, Famílias e
-usuários, Temas e conteúdo, Suporte, Notificações; dashboard de métricas +
-log de auditoria) foram entregues, testadas (pgTAP + `flutter test`,
-65/65) e documentadas. Os quatro papéis administrativos têm pelo menos um
-módulo funcional. Lacunas conhecidas e deliberadamente não bloqueantes
-(cada uma com a razão técnica registrada em `docs/18_PENDENCIAS_NAO_BLOQUEANTES.md`
-seção 7): push real, templates/reprocessamento de notificação e anexos
-privados de ticket (bloqueados por infraestrutura externa — Firebase,
-decisão de Storage); "gestão de papéis" (sem módulo que tenha dependido
-disso); publicar os temas `draft` do Marco 5 (falta só a arte, o mecanismo
-existe).
+**Marcos 7 e 8 estão concluídos.** Todo o trabalho de engenharia dos
+Marcos 1-8 foi entregue, testado (pgTAP + `flutter test`, 65/65) e
+documentado. Não existe mais um "próximo marco" no sentido de código novo
+a escrever a partir do roadmap — o que resta antes de um lançamento real
+é uma mistura de (a) validar contra infraestrutura real o que já foi
+revisado só manualmente, e (b) decisões de produto/jurídicas/comerciais
+que nenhuma linha de código resolve sozinha.
 
-**Próximo: Marco 8 — Privacidade e release** (docs/16 seção 10). Não
-iniciado. Itens do checklist:
+**(a) Validação contra infraestrutura real** — nada foi executado contra
+um Postgres/Supabase de verdade ainda, só revisado manualmente:
 
-- fluxo de exclusão dupla (`deletion_requests` já tem modelo em docs/09
-  seção 8, sem tabela nem função implementada ainda);
-- exportação de dados (LGPD/portabilidade — nada implementado);
-- retenção (política de prazo por tipo de dado — pendente também em
-  docs/18 seção 6, "requer revisão jurídica");
-- revisão de consentimento;
-- revisão de SDKs (confirmar que nenhum SDK de terceiro coleta mais do
-  que o declarado — CLAUDE.md: "evitar analytics de terceiros no ambiente
-  infantil");
-- pentest/segurança;
-- testes E2E;
-- desempenho;
-- acessibilidade (WCAG AA, docs/06 seção 9 — nunca formalmente auditado,
-  só seguido por convenção nas telas construídas);
-- Google Play Families / App Store Kids e parental gate (decisão de
-  categoria pendente em docs/18 seção 5);
-- TestFlight e track fechado;
-- backups e runbooks;
-- revisão jurídica (docs/18 seção 6 lista tudo que falta: texto de
-  consentimento, bases legais, RIPD, política de privacidade, termos,
-  contratos com Supabase/Firebase/lojas).
+1. Criar um projeto Supabase real de desenvolvimento (bloqueio 4) e
+   aplicar todas as migrations (`supabase/migrations/`, atualmente
+   65 arquivos cobrindo os Marcos 1-8) — primeira vez que qualquer
+   função/RLS/gatilho roda contra um Postgres de verdade;
+2. Confirmar `pg_cron` disponível (bloqueio 2) — sete jobs agendados
+   dependem disso: `generate_task_occurrences`,
+   `expire_due_task_occurrences`, `expire_support_overrides`,
+   `process_scheduled_deletions`, `purge_stale_operational_data`, mais os
+   dois que a fila `outbox_events` ainda não usa;
+3. Rodar `supabase db lint`/`supabase test db` (bloqueio 1, exige Docker
+   nesta máquina) — confirmar as 376 asserções pgTAP acumuladas dos
+   Marcos 2-8;
+4. Provisionar o primeiro `platform_admin` (runbook,
+   `docs/21_RUNBOOKS_OPERACIONAIS.md` seção 2) e validar cada módulo do
+   painel com dados reais;
+5. Gerar `apps/mobile/env/dev.json` apontando pro projeto real (formato em
+   `.env.example`) e rebuildar — hoje o app só abre até a tela de acesso
+   comum com credenciais placeholder;
+6. Rodar `flutter test integration_test` num dispositivo/emulador real
+   (infraestrutura pronta desde o Marco 8, não executado com sucesso
+   nesta máquina) — com um backend real, fluxos além do smoke test atual
+   passam a ser possíveis de escrever.
 
-Diferente dos Marcos 1-7 (código novo sobre uma base que já existia), o
-Marco 8 é majoritariamente **decisão de produto/jurídica primeiro,
-implementação depois** — vários itens (retenção, revisão jurídica,
-categoria nas lojas) não têm o que codificar até o proprietário do
-produto decidir a política. Recomenda-se começar pelo fluxo de exclusão
-dupla e exportação de dados (têm requisito técnico claro em docs/09/
-docs/10 mesmo sem toda decisão jurídica fechada), e tratar
-pentest/E2E/desempenho/acessibilidade como uma passada de validação sobre
-os Marcos 1-7 já construídos.
+**(b) Decisões que não são engenharia**, todas já registradas em
+`docs/18_PENDENCIAS_NAO_BLOQUEANTES.md` — revisão jurídica completa
+(seção 6), contas de desenvolvedor Apple/Google e categoria Kids/Families
+(seção 5), domínio/e-mail transacional/contato de suporte (seção 4),
+preço e balanceamento final (seções 1 e 3), marca e assets finais
+(seção 2). Nenhuma delas tem uma tarefa de código esperando — são
+decisões do proprietário do produto ou de terceiros (advogado, Apple,
+Google).
 
-Um administrador ainda precisa ser provisionado manualmente para testar
-qualquer módulo do painel (`service_role`: criar o usuário no Supabase
-Auth e inserir a linha em `platform_admins`) — não existe autocadastro
-nem, ainda, uma tela de gestão de papéis para o `super_admin` promover
-outros (docs/18 seção 7).
-
-Antes de continuar, recomenda-se validar os Marcos 1-7 num ambiente com
-Docker (`supabase start`, `supabase db lint --local`, `supabase test db`) e,
-se possível, um projeto Supabase real de desenvolvimento — nenhuma migration
-ou função SQL destes marcos foi executada contra um Postgres de verdade
-ainda, só revisada manualmente. Confirmar também se `pg_cron` está
-disponível nesse projeto (bloqueio 2 acima).
+Sem essas duas frentes resolvidas, o produto está **funcionalmente
+completo mas não pronto para publicar nas lojas** (docs/16 seção 10:
+"candidato de produção"). Se surgir uma tarefa de engenharia nova depois
+disso, ela provavelmente nasce de uma dessas decisões (ex.: categoria
+Kids da Apple decidida → ajustar parental gate/textos; provedor de
+e-mail escolhido → ligar `send-guardian-invite` de verdade).

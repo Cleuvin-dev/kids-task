@@ -28,7 +28,8 @@ class WalletRepository {
           .from('coin_ledger')
           .select()
           .eq('child_id', childId)
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(200);
       return List<Map<String, dynamic>>.from(rows as List);
     } catch (error) {
       throw mapSupabaseError(error);

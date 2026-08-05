@@ -23,6 +23,7 @@ export 'src/errors/supabase_error_mapper.dart';
 export 'src/family/child_repository.dart';
 export 'src/family/family_repository.dart';
 export 'src/notifications/notification_repository.dart';
+export 'src/privacy/privacy_repository.dart';
 export 'src/providers.dart';
 export 'src/rewards/redemption_repository.dart';
 export 'src/rewards/reward_repository.dart';

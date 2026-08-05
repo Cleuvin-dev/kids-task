@@ -18,6 +18,7 @@ import 'client/kids_task_supabase.dart';
 import 'family/child_repository.dart';
 import 'family/family_repository.dart';
 import 'notifications/notification_repository.dart';
+import 'privacy/privacy_repository.dart';
 import 'rewards/redemption_repository.dart';
 import 'rewards/reward_repository.dart';
 import 'tasks/occurrence_repository.dart';
@@ -88,6 +89,10 @@ final themeRepositoryProvider = Provider<ThemeRepository>(
 
 final notificationRepositoryProvider = Provider<NotificationRepository>(
   (ref) => NotificationRepository(ref.watch(supabaseClientProvider)),
+);
+
+final privacyRepositoryProvider = Provider<PrivacyRepository>(
+  (ref) => PrivacyRepository(ref.watch(supabaseClientProvider)),
 );
 
 /// Tema do responsável, resolvido a partir de `families.guardian_theme`

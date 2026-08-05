@@ -5,7 +5,7 @@
 Não iniciar várias fases incompletas em paralelo. Cada marco termina com migrations, testes, documentação e demonstração funcional.
 
 **Status geral (ver `docs/IMPLEMENTATION_STATUS.md` para o detalhe técnico
-de cada item marcado):** Marcos 0-5 e 7 concluídos. Marco 6 concluído
+de cada item marcado):** Marcos 0-5, 7 e 8 concluídos. Marco 6 concluído
 **parcialmente**. Quando um item está marcado `[x]` mas tem uma lacuna
 relevante, o texto ao lado explica exatamente qual — nunca um item foi
 silenciosamente dado como pronto. Nenhuma migration ou função SQL foi
@@ -145,22 +145,25 @@ Saída: modelo de negócio operacional.
 
 ## 10. Marco 8 — Privacidade e release
 
-Não iniciado.
+**Concluído** o que é engenharia — ver `docs/IMPLEMENTATION_STATUS.md`.
+Itens que dependem de advogado, conta real de loja ou revisão externa
+ficam registrados em `docs/18_PENDENCIAS_NAO_BLOQUEANTES.md` seção 7,
+nunca fingidos como prontos.
 
-- [ ] fluxo de exclusão dupla;
-- [ ] exportação de dados;
-- [ ] retenção;
-- [ ] revisão de consentimento;
-- [ ] revisão de SDKs;
-- [ ] pentest/segurança;
-- [ ] testes E2E;
-- [ ] desempenho;
-- [ ] acessibilidade;
-- [ ] Google Play Families;
-- [ ] App Store/Kids e parental gate;
-- [ ] TestFlight e track fechado;
-- [ ] backups e runbooks;
-- [ ] revisão jurídica.
+- [x] fluxo de exclusão dupla — `deletion_requests`, aprovação do segundo responsável (ou confirmação forte do único), período de segurança de 7 dias, cancelamento a qualquer momento, execução automática via `pg_cron` (anonimiza identidade da criança, mantém ledgers/eventos, revoga aparelhos); escopo exato de anonimização é default técnico pendente de validação jurídica;
+- [x] exportação de dados — `export_family_data`, dados da própria família só, nunca `pin_hash`;
+- [x] retenção — `purge_stale_operational_data` diária (convites, tentativas de login, tokens de push); janelas são default técnico pendente de validação jurídica;
+- [x] revisão de consentimento — achado real corrigido (`revoke_consent` não existia, docs/10 seção 4 exige "consulta e revogação"); texto de retenção/terceiros adicionado; identificação do controlador e explicação infantil curta ficaram de fora (dependem de dado que não existe / risco de mexer numa tela já testada sem validação visual — registrado);
+- [x] revisão de SDKs — inventário completo, sem SDK de anúncio/analytics/crash de terceiro;
+- [x] pentest/segurança — auto-revisão de código encontrou e corrigiu uma falha real de ordenação de autorização (`respond_family_deletion`/`cancel_family_deletion` verificavam estado do pedido antes de checar se quem chamou pertence à família) e adicionou o teste de isolamento entre famílias que faltava; **não substitui um pentest externo contra ambiente real**;
+- [x] testes E2E — `integration_test` configurado com um smoke test real; fluxos profundos exigem projeto Supabase real para exercitar de ponta a ponta;
+- [x] desempenho — revisão de código encontrou e corrigiu três listas sem paginação que cresceriam sem limite (histórico de KidsCoins, histórico de resgates); sem medição em dispositivo/ambiente real;
+- [x] acessibilidade — 3 `IconButton` sem `tooltip` corrigidos no app móvel (o painel já estava 100% coberto); sem auditoria com leitor de tela real;
+- [ ] Google Play Families — decisão de categoria pendente (docs/18 seção 5);
+- [ ] App Store/Kids e parental gate — barreira parental já existe desde o Marco 1 (docs/07 seção 8); decisão de participar da Kids Category continua pendente (docs/18 seção 5);
+- [ ] TestFlight e track fechado — depende de conta Apple/Google Developer real (docs/18 seção 5);
+- [x] backups e runbooks — `docs/21_RUNBOOKS_OPERACIONAIS.md` (backup/restauração, provisionamento de admin, incidentes, deploy/rollback); execução real depende de projeto Supabase real;
+- [ ] revisão jurídica — não é tarefa de engenharia (docs/18 seção 6).
 
 Saída: candidato de produção.
 
