@@ -6,6 +6,7 @@
 /// reutilizados por todos os recursos futuros.
 library;
 
+export 'src/auth/admin_role.dart';
 export 'src/auth/user_role.dart';
 export 'src/common/result.dart';
 export 'src/errors/domain_error_code.dart';

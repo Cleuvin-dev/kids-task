@@ -129,7 +129,7 @@ Parcial. Fatia 1 (backend de assinaturas) concluída — ver
 - [x] validação backend — `verify_purchase` (máquina de estados real; validação criptográfica contra a loja em si continua bloqueada por falta de conta de desenvolvedor, docs/18 seção 5);
 - [x] webhooks — `handle_apple_notification`/`handle_google_notification`, idempotentes e com detecção de evento fora de ordem; nenhuma Edge Function de recepção/validação de assinatura foi criada ainda;
 - [x] downgrade seguro — `apply_safe_downgrade`/`restore_paused_entitlements`, testado (docs/02 seção 5);
-- [ ] painel com MFA — `apps/admin_web` ainda é só o scaffold do Marco 0;
+- [x] painel com MFA — fundação pronta: login separado, `platform_admins`, MFA obrigatório (TOTP) e auditoria (`record_admin_audit_log`); nenhum módulo do painel existe ainda;
 - [ ] famílias/usuários;
 - [ ] assinatura (módulo do painel — ver docs/12 seção 5, distinto do backend acima);
 - [ ] temas/conteúdo — inclui publicar os temas `draft` do Marco 5;

@@ -1,6 +1,6 @@
 # Status de Implementação
 
-**Última atualização:** 04/08/2026
+**Última atualização:** 05/08/2026
 
 **Estado atual:** Marco 0 — Fundação concluído. Marco 1 — Autenticação e
 Família concluído. Marco 2 — Rotina e Tarefas concluído. Marco 3 —
@@ -9,10 +9,12 @@ Marco 5 — Temas e Experiência por Idade concluído. Marco 6 — Notificaçõe
 concluído **parcialmente** (central interna funciona de ponta a ponta;
 push de verdade via FCM/APNs está bloqueado por falta de projeto Firebase
 real — ver "Bloqueios"). Marco 7 — Premium e Painel iniciado
-**parcialmente**: só o backend de assinaturas (fatia 1) está pronto —
-`apps/admin_web` continua sendo o scaffold do Marco 0, sem MFA nem
-módulos. Este documento e o `git log` são a fonte de verdade do que já
-existe; ler esta seção e a "Próxima ação" antes de continuar.
+**parcialmente**: backend de assinaturas (fatia 1) e fundação do painel
+Web — login separado + MFA obrigatório + auditoria (fatia 2) — estão
+prontos; `apps/admin_web` ainda não tem nenhum módulo (famílias, conteúdo,
+assinaturas, notificações, suporte). Este documento e o `git log` são a
+fonte de verdade do que já existe; ler esta seção e a "Próxima ação" antes
+de continuar.
 
 ## Repositório
 
@@ -129,6 +131,42 @@ ponta a ponta:
   Registro/preferência de push (`register_device_token` etc.) não tem
   tela ainda — sem SDK de push instalado, não há token real para
   registrar (bloqueio abaixo).
+
+### apps/admin_web
+
+Painel administrativo Web, separado do app móvel (docs/12 seção 10:
+"login separado do app infantil") — mesmo `Supabase Auth`, conta e sessão
+distintas.
+
+- **Marco 7 (fatia 2)** — fundação (login + MFA obrigatório), sobre o
+  scaffold do Marco 0:
+  - `/admin/access`: login por e-mail/senha, "esqueci minha senha". Sem
+    "criar conta" — provisionar um administrador é operação manual
+    (`service_role`; ver "Bloqueios" abaixo), não um fluxo de autocadastro.
+  - `/admin/mfa/enroll`: enrolamento TOTP obrigatório na primeira vez —
+    mostra a chave secreta para digitar num app autenticador (sem QR code
+    nesta fatia, para não trazer uma dependência de renderização de SVG só
+    para a fundação; uso interno, poucos operadores) e confirma com um
+    código de 6 dígitos.
+  - `/admin/mfa/challenge`: verificação de MFA em sessões que já têm um
+    fator TOTP verificado, mas ainda estão em `aal1`.
+  - `/admin/unauthorized`: conta autenticada sem vínculo ativo em
+    `platform_admins` — estado explícito em vez de erro genérico (não
+    deveria acontecer em uso normal, já que não há autocadastro).
+  - `/admin/home`: placeholder pós-login mostrando o papel do
+    administrador; nenhum módulo (famílias, conteúdo, assinaturas,
+    notificações, suporte) existe ainda — fica para as próximas fatias.
+  - Guard único em `go_router`, mesmo padrão do app móvel: `redirect`
+    sempre lê `adminResolvedSessionProvider` (backend + estado de MFA da
+    sessão) de forma síncrona, com `RouterRefreshNotifier` reagindo a
+    mudanças — nenhuma sessão chega a `/admin/home` sem `aal2`.
+  - `packages/data_access/src/admin`: `AdminAuthRepository`,
+    `AdminMfaRepository` (enrolar/verificar TOTP via `supabase_flutter`
+    `auth.mfa`), `AdminSessionResolver` (`AdminNoSession` /
+    `AdminUnauthorized` / `AdminMfaEnrollmentRequired` /
+    `AdminMfaChallengeRequired` / `AdminSession`, paralelo ao
+    `SessionRoleResolver` do app móvel) e `AdminAuditLogRepository`
+    (`record_admin_audit_log`). `packages/domain`: `AdminRole`.
 
 ### Backend (Supabase)
 
@@ -359,6 +397,34 @@ fatia (ver "Próxima ação").
   códigos de erro usados já existiam; sem UI consumindo ainda, nenhum
   `SubscriptionRepository` foi criado.
 
+### Backend do painel administrativo (Marco 7, fatia 2)
+
+- Migrations (`supabase/migrations/202607311000{36..38}_*.sql`):
+  `platform_admins` (`profile_id` → `profiles.id`, `role` em
+  `super_admin`/`support`/`content`/`billing`, `mfa_required`, `active`) e
+  `audit_logs` (append-only: ator, papel, ação, recurso, resultado,
+  metadata) — docs/09 seção 8, docs/12 seções 2 e 10.
+- RLS: `platform_admins` só permite `select` da própria linha (é o que o
+  app usa para resolver "eu sou admin? qual papel?"); sem policy de
+  insert/update/delete — provisionar/alterar um administrador é operação
+  manual (`service_role`) nesta fatia, não um módulo de gestão de papéis
+  (isso fica para uma fatia futura, junto do resto do painel). `audit_logs`
+  permite `select` das próprias ações para qualquer admin ativo e visão
+  completa para `super_admin`; sem nenhuma policy de escrita — só via
+  `record_admin_audit_log`.
+- Função `record_admin_audit_log` (security definer, `authenticated`):
+  grava uma linha de auditoria só se o chamador for um `platform_admins`
+  ativo **e** a sessão já estiver em `aal2` (segundo fator verificado) —
+  reforço de "MFA obrigatório" no banco, além do gate síncrono do
+  `AdminSessionResolver` no app. Nesta fatia o único chamador real é a
+  confirmação de MFA (enrolamento ou desafio) no login; os módulos futuros
+  do painel devem reaproveitar a mesma função.
+- pgTAP: `supabase/tests/database/80_marco7_platform_admin_test.sql`
+  (13 asserções) cobrindo: admin ativo com `aal2` grava auditoria;
+  bloqueios (não-admin, sessão sem `aal2`, admin inativo); RLS de
+  `audit_logs` (super_admin vê tudo, outro papel só as próprias ações);
+  RLS de `platform_admins` (só a própria linha); privilégio mínimo.
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -376,17 +442,17 @@ fatia (ver "Próxima ação").
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
-| 7 — Premium e painel | **Parcial** | Backend de assinaturas completo (ver seção acima). Painel Web (`apps/admin_web`) continua só o scaffold do Marco 0 — sem MFA, sem módulos |
+| 7 — Premium e painel | **Parcial** | Backend de assinaturas completo e fundação do painel Web (login separado + MFA obrigatório + auditoria) prontos — ver seções acima. `apps/admin_web` ainda não tem nenhum módulo (famílias, conteúdo, assinaturas, notificações, suporte) |
 | 8 — Privacidade e release | Não iniciado | — |
 
-## Testes (executados localmente em 04/08/2026)
+## Testes (executados localmente em 05/08/2026)
 
 | Comando | Escopo | Resultado |
 |---|---|---|
-| `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes (nenhum código Dart mudou nesta fatia) |
+| `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (26), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (1) | ✅ 52/52 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 4 migrations novas e o pgTAP de assinaturas (39 asserções, total 194 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (1) | ✅ 55/55 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 3 migrations novas e o pgTAP de administradores da plataforma (13 asserções, total 207 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
@@ -397,8 +463,9 @@ fatia (ver "Próxima ação").
    Marcos 2-7 foram revisadas manualmente com atenção a nomes de coluna,
    tipos e assinaturas, mas **não foram executadas** contra um Postgres
    real. Isso inclui o pgTAP de assinaturas
-   (`70_marco7_subscriptions_test.sql`), que só será confirmado quando
-   rodar em CI ou numa máquina com Docker.
+   (`70_marco7_subscriptions_test.sql`) e o de administradores da
+   plataforma (`80_marco7_platform_admin_test.sql`), que só serão
+   confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` assume que a extensão está
    disponível (padrão em projetos Supabase Cloud), mas isso só pode ser
@@ -446,24 +513,29 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 (fatia 2) — Fundação do painel Web (login + MFA)**: o backend de
-assinaturas (fatia 1, ver seção acima) está pronto. A próxima fatia é
-construir `apps/admin_web` a partir do scaffold do Marco 0
-(`FoundationPage`) — schema `platform_admins`/papéis (`super_admin`,
-`support`, `content`, `billing`) + auditoria append-only + RLS (docs/12
-seção 2 e 10); MFA obrigatório via Supabase Auth (TOTP); no Flutter, um
-`AdminSession`/resolver dedicado em `packages/data_access` (separado do
-`SessionRoleResolver` do app móvel, já que responsável não passa por MFA e
-o painel é "login separado do app infantil", docs/12 seção 10) e roteamento
-por papel usando o mesmo padrão `ref.listen` + `AsyncValue.when` síncrono já
-validado em `apps/mobile/lib/app/router.dart` (evita o deadlock de redirect
-assíncrono do go_router). Sem dashboard/famílias/conteúdo/suporte ainda —
-isso fica para fatias seguintes dentro do próprio Marco 7.
+**Marco 7 (fatia 3) — Primeiro módulo real do painel**: login separado,
+MFA obrigatório e auditoria (fatia 2, ver seção acima) estão prontos, assim
+como o backend de assinaturas (fatia 1). `/admin/home` ainda é um
+placeholder sem nenhum módulo. Sugestão de ordem, seguindo docs/12: (1)
+"Famílias e usuários" (seção 4) — busca por família/e-mail, status, plano,
+responsáveis, quantidade de crianças, sem expor dado infantil por padrão
+(seção 3: "não mostrar nomes de crianças no dashboard") — é o módulo que
+mais depende do `super_admin` já poder promover outros administradores, o
+que ainda não existe (gestão de papéis, seção 2, também pendente); (2)
+"Assinaturas" (seção 5), que já tem backend completo (fatia 1) só faltando
+UI — plano efetivo, loja, estado, override de suporte com expiração.
+Cada módulo novo que gravar algo deve chamar `record_admin_audit_log`
+(fatia 2) em vez de inventar outro mecanismo de auditoria.
+
+Um administrador ainda precisa ser provisionado manualmente para testar
+qualquer módulo (`service_role`: criar o usuário no Supabase Auth e inserir
+a linha em `platform_admins`) — não existe autocadastro nem, ainda, uma
+tela de gestão de papéis para o `super_admin` promover outros.
 
 Pendências técnicas ainda não decididas que bloqueiam parte deste marco
 (docs/18): contas de desenvolvedor Apple/Google Play, IDs de produto de
 assinatura em produção, domínio/hospedagem do painel Web — nenhuma delas
-impede a fundação do painel ou o backend de assinaturas já construído, mas
+impede os módulos do painel ou o backend de assinaturas já construído, mas
 testar a compra de verdade e publicar o painel dependem delas.
 
 Antes de continuar, recomenda-se validar os Marcos 1-7 num ambiente com

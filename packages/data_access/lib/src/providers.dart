@@ -1,6 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'admin/admin_audit_log_repository.dart';
+import 'admin/admin_auth_repository.dart';
+import 'admin/admin_mfa_repository.dart';
+import 'admin/admin_session_resolver.dart';
 import 'auth/guardian_auth_repository.dart';
 import 'auth/session_role_resolver.dart';
 import 'child_access/child_access_repository.dart';
@@ -118,4 +122,38 @@ final authStateChangesProvider = StreamProvider<AuthState>(
 final resolvedSessionProvider = FutureProvider<ResolvedSession>((ref) async {
   ref.watch(authStateChangesProvider);
   return ref.watch(sessionRoleResolverProvider).resolve();
+});
+
+/// Providers do painel administrativo Web (`apps/admin_web`), paralelos aos
+/// de cima — conta separada do app móvel, mesmo padrão de injeção
+/// (docs/12 seção 10).
+
+final adminAuthRepositoryProvider = Provider<AdminAuthRepository>(
+  (ref) => AdminAuthRepository(ref.watch(supabaseClientProvider)),
+);
+
+final adminMfaRepositoryProvider = Provider<AdminMfaRepository>(
+  (ref) => AdminMfaRepository(ref.watch(supabaseClientProvider)),
+);
+
+final adminAuditLogRepositoryProvider = Provider<AdminAuditLogRepository>(
+  (ref) => AdminAuditLogRepository(ref.watch(supabaseClientProvider)),
+);
+
+final adminSessionResolverProvider = Provider<AdminSessionResolver>(
+  (ref) => AdminSessionResolver(ref.watch(supabaseClientProvider)),
+);
+
+final adminAuthStateChangesProvider = StreamProvider<AuthState>(
+  (ref) => ref.watch(adminAuthRepositoryProvider).authStateChanges,
+);
+
+/// Fonte única de verdade para "quem é este administrador", incluindo o
+/// estado de MFA da sessão — recalculada a cada mudança de autenticação ou
+/// verificação de fator (docs/12 seções 2 e 10).
+final adminResolvedSessionProvider = FutureProvider<AdminResolvedSession>((
+  ref,
+) async {
+  ref.watch(adminAuthStateChangesProvider);
+  return ref.watch(adminSessionResolverProvider).resolve();
 });

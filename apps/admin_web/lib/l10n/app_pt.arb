@@ -3,9 +3,5 @@
   "appTitle": "Kid's Task — Painel Administrativo",
   "@appTitle": {
     "description": "Nome exibido no título da aba/janela do painel administrativo."
-  },
-  "foundationPlaceholder": "Fundação do painel em construção. Login com MFA e módulos por papel chegam em marco futuro.",
-  "@foundationPlaceholder": {
-    "description": "Texto temporário da tela inicial enquanto o Marco 7 (Premium e painel Web) ainda não existe."
   }
 }
