@@ -91,17 +91,42 @@ void main() {
     expect(find.text('Suporte'), findsNothing);
   });
 
-  testWidgets('support vê os módulos Famílias e usuários e Suporte', (
-    tester,
-  ) async {
+  testWidgets(
+    'support vê os módulos Famílias e usuários, Suporte e Notificações',
+    (tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(home: AdminHomePage(role: AdminRole.support)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Famílias e usuários'), findsOneWidget);
+      expect(find.text('Suporte'), findsOneWidget);
+      expect(find.text('Notificações'), findsOneWidget);
+      expect(find.text('Dashboard'), findsNothing);
+    },
+  );
+
+  testWidgets('billing não vê o módulo Notificações', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
-        child: MaterialApp(home: AdminHomePage(role: AdminRole.support)),
+        child: MaterialApp(home: AdminHomePage(role: AdminRole.billing)),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Famílias e usuários'), findsOneWidget);
-    expect(find.text('Suporte'), findsOneWidget);
+    expect(find.text('Notificações'), findsNothing);
+  });
+
+  testWidgets('só super_admin vê o módulo Dashboard', (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: AdminHomePage(role: AdminRole.superAdmin)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dashboard'), findsOneWidget);
   });
 }

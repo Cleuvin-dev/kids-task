@@ -113,6 +113,29 @@ Pendências específicas do backend de assinaturas (Marco 7, fatia 1 —
   um critério; se o produto quiser outro (ex.: por horário programado da
   tarefa), é uma migration nova em `apply_safe_downgrade`.
 
+Pendências específicas do painel administrativo (Marco 7, fatias 4-7 —
+`docs/IMPLEMENTATION_STATUS.md`):
+
+- "Gestão de papéis" (docs/12 seção 2: `super_admin` promover outros
+  administradores pela UI) — nenhuma fatia implementou; provisionar um
+  admin continua manual (`service_role`, criar usuário + inserir linha em
+  `platform_admins`). Sem prioridade definida porque nenhum módulo até o
+  fim do Marco 7 dependeu disso de verdade;
+- Anexos privados em tickets de suporte (docs/12 seção 9, Marco 7 fatia 6)
+  — adiado por ser o primeiro upload de arquivo de verdade do projeto
+  inteiro (nem foto de criança, docs/09, tem pipeline real); exige decisão
+  própria de bucket do Supabase Storage e policies de `storage.objects`;
+- Templates/categorias, reprocessamento controlado e teste para aparelhos
+  internos de notificação (docs/12 seção 8, Marco 7 fatia 7) — bloqueados
+  pela mesma raiz do bloqueio de push do Marco 6 (sem projeto Firebase,
+  não há pipeline de entrega real para reprocessar ou testar; templates
+  exigiriam refatorar as chamadas de `emit_notification` já commitadas nos
+  Marcos 2-6 para ler de uma tabela nova, fora do escopo de uma fatia de
+  painel);
+- Publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo) —
+  o mecanismo do painel já existe (Marco 7 fatia 5), só falta a arte
+  (seção 2 acima).
+
 ## 8. Decisões que não estão pendentes
 
 Não reabrir sem solicitação do proprietário:

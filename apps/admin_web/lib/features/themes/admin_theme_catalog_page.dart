@@ -325,11 +325,13 @@ class _CreateDraftDialogState extends State<_CreateDraftDialog> {
             decoration: const InputDecoration(
               labelText: 'Slug (ex.: forest_friends)',
             ),
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _nameController,
             decoration: const InputDecoration(labelText: 'Nome'),
+            onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(

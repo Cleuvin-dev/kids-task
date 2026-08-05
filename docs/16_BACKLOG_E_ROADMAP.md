@@ -5,7 +5,7 @@
 Não iniciar várias fases incompletas em paralelo. Cada marco termina com migrations, testes, documentação e demonstração funcional.
 
 **Status geral (ver `docs/IMPLEMENTATION_STATUS.md` para o detalhe técnico
-de cada item marcado):** Marcos 0-5 concluídos. Marco 6 concluído
+de cada item marcado):** Marcos 0-5 e 7 concluídos. Marco 6 concluído
 **parcialmente**. Quando um item está marcado `[x]` mas tem uma lacuna
 relevante, o texto ao lado explica exatamente qual — nunca um item foi
 silenciosamente dado como pronto. Nenhuma migration ou função SQL foi
@@ -120,10 +120,13 @@ de um projeto Firebase real.
 
 ## 9. Marco 7 — Premium e painel Web
 
-Parcial. Fatias 1 (backend de assinaturas), 2 (fundação do painel: login,
-MFA, auditoria), 3 (módulo Assinaturas), 4 (módulo Famílias e usuários),
-5 (módulo Temas e conteúdo) e 6 (módulo Suporte) concluídas — ver
-`docs/IMPLEMENTATION_STATUS.md`.
+**Concluído.** Sete fatias: 1 (backend de assinaturas), 2 (fundação do
+painel: login, MFA, auditoria), 3 (módulo Assinaturas), 4 (módulo
+Famílias e usuários), 5 (módulo Temas e conteúdo), 6 (módulo Suporte) e
+7 (módulo Notificações + dashboard de métricas + log de auditoria) — ver
+`docs/IMPLEMENTATION_STATUS.md`. Lacunas conhecidas e não bloqueantes
+(push real, templates de notificação, anexos de ticket, gestão de papéis)
+registradas em `docs/18_PENDENCIAS_NAO_BLOQUEANTES.md` seção 7.
 
 - [x] planos/entitlements — modelo de assinatura completo (`subscriptions`, `v_effective_entitlements`, `resolve_effective_plan_code`);
 - [x] produtos de loja — `subscription_products`, mapeamento versionado store+product_id→plano;
@@ -136,7 +139,7 @@ MFA, auditoria), 3 (módulo Assinaturas), 4 (módulo Famílias e usuários),
 - [x] assinatura (módulo do painel — docs/12 seção 5): busca de família, plano efetivo, eventos, conceder/revogar override de suporte com expiração automática (`expire_support_overrides` via `pg_cron`);
 - [x] temas/conteúdo — catálogo administrado de ponta a ponta (criar rascunho, editar chave de asset, publicar com versionamento e confirmação de revisão de PI, retirar sem quebrar famílias atuais) e fila de solicitações Premium de tema; publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo) continua bloqueado só por falta de arte própria, não de mecanismo;
 - [x] suporte — tickets com categoria/prioridade/timeline/resposta/encerramento e vínculo com incidente, sem impersonação (docs/12 seção 9); anexos privados adiados (primeiro upload de arquivo real do projeto, decisão técnica própria ainda não tomada);
-- [ ] métricas e auditoria.
+- [x] métricas e auditoria — dashboard agregado (`super_admin` só, nunca nome de criança) e log de auditoria (`audit_logs`, RLS já pronta desde a fatia 2, só faltava a tela); notificações do painel (docs/12 seção 8) também entregues nesta fatia: histórico do canal interno e aviso operacional aos responsáveis — templates, reprocessamento e teste de aparelho continuam bloqueados pela mesma falta de projeto Firebase do Marco 6.
 
 Saída: modelo de negócio operacional.
 

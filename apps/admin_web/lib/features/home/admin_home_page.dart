@@ -9,8 +9,7 @@ import 'package:go_router/go_router.dart';
 ///
 /// Só os módulos já construídos aparecem, e só para quem tem o papel
 /// certo (docs/12 seção 12: "nenhum operador acessa módulo fora de seu
-/// papel") — notificações do painel ainda não existem (ver
-/// docs/IMPLEMENTATION_STATUS.md, "Próxima ação").
+/// papel").
 class AdminHomePage extends ConsumerWidget {
   const AdminHomePage({super.key, required this.role});
 
@@ -27,6 +26,9 @@ class AdminHomePage extends ConsumerWidget {
         role == AdminRole.superAdmin || role == AdminRole.content;
     final canSeeSupport =
         role == AdminRole.superAdmin || role == AdminRole.support;
+    final canSeeNotifications =
+        role == AdminRole.superAdmin || role == AdminRole.support;
+    final canSeeDashboard = role == AdminRole.superAdmin;
 
     return Scaffold(
       backgroundColor: tokens.colorBackground,
@@ -47,7 +49,7 @@ class AdminHomePage extends ConsumerWidget {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -111,13 +113,39 @@ class AdminHomePage extends ConsumerWidget {
                       onTap: () => context.push('/admin/support'),
                     ),
                   ),
+                if (canSeeNotifications)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.campaign_outlined),
+                      title: const Text('Notificações'),
+                      subtitle: const Text(
+                        'Histórico do canal interno e envio de aviso '
+                        'operacional aos responsáveis',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/admin/notifications'),
+                    ),
+                  ),
+                if (canSeeDashboard)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.dashboard_outlined),
+                      title: const Text('Dashboard'),
+                      subtitle: const Text(
+                        'Métricas agregadas da plataforma e log de auditoria',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/admin/dashboard'),
+                    ),
+                  ),
                 if (!canSeeSubscriptions &&
                     !canSeeFamilies &&
                     !canSeeThemes &&
-                    !canSeeSupport)
+                    !canSeeSupport &&
+                    !canSeeNotifications &&
+                    !canSeeDashboard)
                   const Text(
-                    'Nenhum módulo disponível para o seu papel ainda — '
-                    'notificações do painel chegam em próxima fatia.',
+                    'Nenhum módulo disponível para o seu papel ainda.',
                     textAlign: TextAlign.center,
                   ),
               ],

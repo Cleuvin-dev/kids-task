@@ -3,8 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'admin/admin_audit_log_repository.dart';
 import 'admin/admin_auth_repository.dart';
+import 'admin/admin_dashboard_repository.dart';
 import 'admin/admin_family_repository.dart';
 import 'admin/admin_mfa_repository.dart';
+import 'admin/admin_notification_repository.dart';
 import 'admin/admin_session_resolver.dart';
 import 'admin/admin_subscription_repository.dart';
 import 'admin/admin_support_repository.dart';
@@ -163,6 +165,15 @@ final adminThemeRepositoryProvider = Provider<AdminThemeRepository>(
 
 final adminSupportRepositoryProvider = Provider<AdminSupportRepository>(
   (ref) => AdminSupportRepository(ref.watch(supabaseClientProvider)),
+);
+
+final adminNotificationRepositoryProvider =
+    Provider<AdminNotificationRepository>(
+      (ref) => AdminNotificationRepository(ref.watch(supabaseClientProvider)),
+    );
+
+final adminDashboardRepositoryProvider = Provider<AdminDashboardRepository>(
+  (ref) => AdminDashboardRepository(ref.watch(supabaseClientProvider)),
 );
 
 final adminAuthStateChangesProvider = StreamProvider<AuthState>(

@@ -205,6 +205,7 @@ class _CreateTicketDialogState extends State<_CreateTicketDialog> {
             TextField(
               controller: _subjectController,
               decoration: const InputDecoration(labelText: 'Assunto'),
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(

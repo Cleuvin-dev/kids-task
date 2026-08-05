@@ -8,18 +8,21 @@ KidsCoins e Recompensas concluído. Marco 4 — XP e Progressão concluído.
 Marco 5 — Temas e Experiência por Idade concluído. Marco 6 — Notificações
 concluído **parcialmente** (central interna funciona de ponta a ponta;
 push de verdade via FCM/APNs está bloqueado por falta de projeto Firebase
-real — ver "Bloqueios"). Marco 7 — Premium e Painel iniciado
-**parcialmente**: backend de assinaturas (fatia 1), fundação do painel Web
-— login separado + MFA obrigatório + auditoria (fatia 2), módulo
-Assinaturas (fatia 3: busca de família, plano efetivo, override de
-suporte), módulo "Famílias e usuários" (fatia 4: busca, detalhe com
-identidade infantil oculta por padrão, aparelhos, consentimentos e
-alteração de status com revogação de aparelhos infantis), módulo "Temas e
-conteúdo" (fatia 5: catálogo de temas — criar rascunho, editar, publicar
-versionado, retirar — e fila de solicitações Premium de tema) e módulo
-"Suporte" (fatia 6: tickets com categoria/prioridade/timeline/resposta/
-encerramento, sem impersonação) estão prontos; `apps/admin_web` ainda não
-tem notificações do painel. Este documento e o `git log` são a fonte de
+real — ver "Bloqueios"). **Marco 7 — Premium e Painel concluído**: backend
+de assinaturas (fatia 1); fundação do painel Web — login separado + MFA
+obrigatório + auditoria (fatia 2); módulo Assinaturas (fatia 3); módulo
+"Famílias e usuários" (fatia 4); módulo "Temas e conteúdo" (fatia 5);
+módulo "Suporte" (fatia 6); e módulo "Notificações" do painel + dashboard
+de métricas + log de auditoria (fatia 7) estão prontos — os quatro papéis
+administrativos (`super_admin`/`billing`/`support`/`content`) têm pelo
+menos um módulo funcional. Como no Marco 5/6, "concluído" não significa
+zero lacunas: push real, templates de notificação, reprocessamento e
+anexos privados de ticket continuam bloqueados por falta de infraestrutura
+externa (projeto Firebase, decisão de Supabase Storage) — ver "Bloqueios"
+e as notas de cada fatia abaixo. "Gestão de papéis" (docs/12 seção 2) e
+publicar os temas `draft` do Marco 5 (falta de arte própria) ficam como
+pendências não bloqueantes, registradas em
+`docs/18_PENDENCIAS_NAO_BLOQUEANTES.md`. Este documento e o `git log` são a fonte de
 verdade do que já existe; ler esta
 seção e a "Próxima ação" antes de continuar.
 
@@ -284,6 +287,43 @@ distintas.
     `storage.objects`, seletor de arquivo no Flutter Web) que não deveria
     ser encaixada como sub-item desta entrega. A timeline cobre resposta
     em texto sem anexo por enquanto.
+- **Marco 7 (fatia 7)** — módulo "Notificações" do painel (docs/12 seção
+  8, visível a `super_admin`/`support`) e "métricas e auditoria" (docs/12
+  seções 3 e 10, dashboard visível só a `super_admin`) — fecha o Marco 7:
+  - `/admin/notifications`: histórico do canal interno (`notifications`,
+    o único canal real sem push) e "Enviar aviso operacional" — chega só
+    aos responsáveis ativos de uma família (ID informado manualmente),
+    nunca à criança (docs/12 seção 8: "sem campanha de marketing
+    direcionada diretamente a crianças no MVP").
+  - `packages/data_access/src/admin/admin_notification_repository.dart`:
+    `AdminNotificationRepository`.
+  - **Simplificação registrada**: "templates/categorias",
+    "reprocessamento controlado" e "teste para aparelhos internos"
+    (docs/12 seção 8) ficam fora — mesma raiz do bloqueio de push do
+    Marco 6 (sem projeto Firebase, não há pipeline de entrega real pra
+    reprocessar ou testar; templates exigiriam refatorar chamadas de
+    `emit_notification` já commitadas nos Marcos 2-6). Registrado em
+    `docs/18_PENDENCIAS_NAO_BLOQUEANTES.md` seção 7.
+  - `/admin/dashboard`: métricas agregadas (famílias totais/ativas/
+    onboarding, responsáveis, crianças, gratuito×Premium, tarefas ativas,
+    aprovações/resgates pendentes, totais aprovados/entregues, tickets
+    abertos) — nunca nome de criança (docs/12 seção 3), só contagens.
+    "Falhas de push/jobs/webhooks" fica deliberadamente fora: não existe
+    rastreamento de falha de `pg_cron` nem de webhook de loja numa tabela
+    consultável — melhor faltar do que fingir uma métrica zero.
+  - `/admin/audit-log`: lista `audit_logs`, cuja RLS já existia pronta
+    desde a fatia 2 (`super_admin` vê tudo, outro papel só as próprias
+    ações) sem nenhuma tela até aqui. "Exportação de auditoria" (docs/12
+    seção 10) é copiar CSV para a área de transferência — não baixar um
+    arquivo — para não depender de API específica do Flutter Web sem um
+    navegador real pra testar neste ambiente.
+  - `packages/data_access/src/admin/admin_dashboard_repository.dart`:
+    `AdminDashboardRepository`.
+  - Corrigido nesta fatia: `AdminHomePage` (todos os módulos desde a
+    fatia 3) tinha a coluna de cards sem rolagem — com seis módulos
+    possíveis para `super_admin`, a tela estourava a altura disponível
+    (`RenderFlex overflowed`, pego pelo teste de widget "só super_admin vê
+    o módulo Dashboard"). Trocado `Padding` por `SingleChildScrollView`.
 
 ### Backend (Supabase)
 
@@ -712,6 +752,39 @@ fatia (ver "Próxima ação").
   billing não pode alterar status; os três `check` de enum rejeitam valor
   inválido; ticket sem família vinculada (consulta geral).
 
+### Backend dos módulos Notificações e Dashboard (Marco 7, fatia 7)
+
+- Migrations (`supabase/migrations/202607311000{54..58}_*.sql`).
+- `notifications_select_admin`: RLS direta para `super_admin`/`support` —
+  `notifications` não guarda identidade infantil na própria linha (título/
+  corpo vêm de snapshot de tarefa/recompensa, não de perfil), então não
+  precisa de função como `child_profiles` (fatia 4).
+- `admin_operational_notices`: ledger de idempotência (mesmo padrão de
+  `family_status_events`/`subscription_events`) para
+  `admin_send_operational_notice` (`super_admin`/`support`, motivo:
+  título/corpo obrigatórios, `p_idempotency_key` obrigatório) — chama
+  `emit_notification` (Marco 6) uma vez por responsável ativo da família,
+  nunca para a criança, grava o ledger e `record_admin_audit_log`. Um
+  retry com a mesma chave devolve o resultado já gravado em vez de
+  reprocessar (e não gera uma segunda linha de auditoria).
+- `admin_get_dashboard_metrics` (`super_admin` só): retorna um único
+  `jsonb` com contagens — famílias totais/ativas/onboarding (proxy:
+  família com criança ativa, sem coluna dedicada), responsáveis, crianças,
+  famílias por plano efetivo (via `v_effective_entitlements`), assinaturas
+  por status, tarefas ativas, ocorrências aguardando aprovação/aprovadas,
+  resgates pendentes/entregues, tickets abertos. Nunca nome de criança
+  (docs/12 seção 3). Métrica de falha de push/job/webhook fica de fora,
+  documentada inline como ausente em vez de aparecer como zero enganoso.
+- Log de auditoria (docs/12 seção 10) não precisou de migration nova —
+  `audit_logs_select_own`/`audit_logs_select_super_admin` já existiam
+  desde a fatia 2, só sem nenhuma tela consumindo até aqui.
+- pgTAP: `supabase/tests/database/130_marco7_admin_notifications_test.sql`
+  (13 asserções: RLS de histórico, papel/validação/idempotência do aviso
+  operacional, nunca notifica criança, auditoria, privilégio mínimo) e
+  `supabase/tests/database/140_marco7_admin_dashboard_test.sql`
+  (9 asserções: controle de acesso só `super_admin`, métricas batendo com
+  dados criados na própria transação de teste).
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -729,7 +802,7 @@ fatia (ver "Próxima ação").
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
-| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria), módulo Assinaturas, módulo Famílias e usuários, módulo Temas e conteúdo e módulo Suporte (tickets, sem impersonação, anexos privados adiados) prontos — ver seções acima. `apps/admin_web` ainda não tem notificações do painel |
+| 7 — Premium e painel | **Concluído** | Backend de assinaturas, fundação do painel Web, módulos Assinaturas/Famílias e usuários/Temas e conteúdo/Suporte/Notificações e dashboard de métricas + log de auditoria prontos — ver seções acima. Lacunas conhecidas (não bloqueiam a conclusão do marco, mesmo espírito do Marco 5/6): push real, templates/reprocessamento de notificação e anexos privados de ticket bloqueados por infraestrutura externa; gestão de papéis e publicar temas `draft` são pendências não bloqueantes (docs/18) |
 | 8 — Privacidade e release | Não iniciado | — |
 
 ## Testes (executados localmente em 05/08/2026)
@@ -738,8 +811,8 @@ fatia (ver "Próxima ação").
 |---|---|---|
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (9) | ✅ 63/63 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 2 migrations novas e o pgTAP do módulo Suporte (18 asserções, total 322 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (11) | ✅ 65/65 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 5 migrations novas e o pgTAP dos módulos Notificações/Dashboard (22 asserções, total 344 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
@@ -754,9 +827,11 @@ fatia (ver "Próxima ação").
    plataforma (`80_marco7_platform_admin_test.sql`), o do módulo
    Assinaturas do painel (`90_marco7_admin_subscriptions_test.sql`), o do
    módulo Famílias e usuários (`100_marco7_admin_families_test.sql`), o do
-   módulo Temas e conteúdo (`110_marco7_admin_themes_test.sql`) e o do
-   módulo Suporte (`120_marco7_admin_support_test.sql`), que só serão
-   confirmados quando rodarem em CI ou numa máquina com Docker.
+   módulo Temas e conteúdo (`110_marco7_admin_themes_test.sql`), o do
+   módulo Suporte (`120_marco7_admin_support_test.sql`) e os dos módulos
+   Notificações/Dashboard (`130_marco7_admin_notifications_test.sql`,
+   `140_marco7_admin_dashboard_test.sql`), que só serão confirmados quando
+   rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` (e, desde a fatia 3 do Marco 7,
    também `20260731100042_admin_subscription_cron.sql`, que agenda
@@ -806,47 +881,59 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 (fatia 7) — "Notificações" do painel** (docs/12 seção 8): login,
-MFA, auditoria (fatia 2), Assinaturas (fatia 3), Famílias e usuários
-(fatia 4), Temas e conteúdo (fatia 5) e Suporte (fatia 6) estão prontos —
-todos os quatro papéis (`super_admin`/`billing`/`support`/`content`) já
-enxergam pelo menos um módulo. Falta:
-- templates e categorias de notificação (o Marco 6 só cobriu os pontos de
-  maior tráfego direto no código, sem nenhuma tela de configuração);
-- histórico de entrega e reprocessamento controlado — hoje `outbox_events`
-  (Marco 6) não tem nenhuma tela consumindo, só o worker futuro (ainda
-  bloqueado por falta de projeto Firebase, ver "Bloqueios");
-- avisos operacionais para responsáveis e teste para aparelhos internos
-  (docs/12 seção 8);
-- explicitamente **sem campanha de marketing direcionada a crianças no
-  MVP** (docs/12 seção 8) — nenhuma tela desta fatia deve abrir espaço
-  para isso.
+**Marco 7 está concluído.** Todas as sete fatias (backend de assinaturas;
+fundação do painel com MFA/auditoria; módulos Assinaturas, Famílias e
+usuários, Temas e conteúdo, Suporte, Notificações; dashboard de métricas +
+log de auditoria) foram entregues, testadas (pgTAP + `flutter test`,
+65/65) e documentadas. Os quatro papéis administrativos têm pelo menos um
+módulo funcional. Lacunas conhecidas e deliberadamente não bloqueantes
+(cada uma com a razão técnica registrada em `docs/18_PENDENCIAS_NAO_BLOQUEANTES.md`
+seção 7): push real, templates/reprocessamento de notificação e anexos
+privados de ticket (bloqueados por infraestrutura externa — Firebase,
+decisão de Storage); "gestão de papéis" (sem módulo que tenha dependido
+disso); publicar os temas `draft` do Marco 5 (falta só a arte, o mecanismo
+existe).
 
-Publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo)
-continua bloqueado por falta de arte própria — a fatia 5 deixou o
-mecanismo pronto (`admin_publish_theme` já valida asset key e confirmação
-de PI), só falta o conteúdo em si. Anexos privados de ticket (fatia 6)
-seguem adiados até existir uma decisão própria de Supabase Storage.
+**Próximo: Marco 8 — Privacidade e release** (docs/16 seção 10). Não
+iniciado. Itens do checklist:
 
-Depois: "Gestão de papéis" (seção 2, `super_admin` promover outros
-administradores pela UI) continua sem prioridade definida — provisionar um
-admin é manual (abaixo) e nenhum módulo até agora dependeu disso de
-verdade. Com Suporte, Temas, Famílias, Assinaturas e (depois desta fatia)
-Notificações prontos, o painel administrativo do Marco 7 estará
-funcionalmente completo pelas seções de docs/12 — restando decidir se
-"métricas e auditoria" (dashboard agregado, docs/12 seção 3) e "gestão de
-papéis" entram no MVP ou ficam pós-lançamento.
+- fluxo de exclusão dupla (`deletion_requests` já tem modelo em docs/09
+  seção 8, sem tabela nem função implementada ainda);
+- exportação de dados (LGPD/portabilidade — nada implementado);
+- retenção (política de prazo por tipo de dado — pendente também em
+  docs/18 seção 6, "requer revisão jurídica");
+- revisão de consentimento;
+- revisão de SDKs (confirmar que nenhum SDK de terceiro coleta mais do
+  que o declarado — CLAUDE.md: "evitar analytics de terceiros no ambiente
+  infantil");
+- pentest/segurança;
+- testes E2E;
+- desempenho;
+- acessibilidade (WCAG AA, docs/06 seção 9 — nunca formalmente auditado,
+  só seguido por convenção nas telas construídas);
+- Google Play Families / App Store Kids e parental gate (decisão de
+  categoria pendente em docs/18 seção 5);
+- TestFlight e track fechado;
+- backups e runbooks;
+- revisão jurídica (docs/18 seção 6 lista tudo que falta: texto de
+  consentimento, bases legais, RIPD, política de privacidade, termos,
+  contratos com Supabase/Firebase/lojas).
+
+Diferente dos Marcos 1-7 (código novo sobre uma base que já existia), o
+Marco 8 é majoritariamente **decisão de produto/jurídica primeiro,
+implementação depois** — vários itens (retenção, revisão jurídica,
+categoria nas lojas) não têm o que codificar até o proprietário do
+produto decidir a política. Recomenda-se começar pelo fluxo de exclusão
+dupla e exportação de dados (têm requisito técnico claro em docs/09/
+docs/10 mesmo sem toda decisão jurídica fechada), e tratar
+pentest/E2E/desempenho/acessibilidade como uma passada de validação sobre
+os Marcos 1-7 já construídos.
 
 Um administrador ainda precisa ser provisionado manualmente para testar
-qualquer módulo (`service_role`: criar o usuário no Supabase Auth e inserir
-a linha em `platform_admins`) — não existe autocadastro nem, ainda, uma
-tela de gestão de papéis para o `super_admin` promover outros.
-
-Pendências técnicas ainda não decididas que bloqueiam parte deste marco
-(docs/18): contas de desenvolvedor Apple/Google Play, IDs de produto de
-assinatura em produção, domínio/hospedagem do painel Web — nenhuma delas
-impede os módulos do painel ou o backend de assinaturas já construído, mas
-testar a compra de verdade e publicar o painel dependem delas.
+qualquer módulo do painel (`service_role`: criar o usuário no Supabase
+Auth e inserir a linha em `platform_admins`) — não existe autocadastro
+nem, ainda, uma tela de gestão de papéis para o `super_admin` promover
+outros (docs/18 seção 7).
 
 Antes de continuar, recomenda-se validar os Marcos 1-7 num ambiente com
 Docker (`supabase start`, `supabase db lint --local`, `supabase test db`) e,

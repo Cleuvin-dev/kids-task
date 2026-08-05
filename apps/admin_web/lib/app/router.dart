@@ -6,11 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/access/admin_sign_in_page.dart';
+import '../features/dashboard/admin_audit_log_page.dart';
+import '../features/dashboard/admin_dashboard_page.dart';
 import '../features/families/admin_family_detail_page.dart';
 import '../features/families/admin_family_search_page.dart';
 import '../features/home/admin_home_page.dart';
 import '../features/mfa/admin_mfa_challenge_page.dart';
 import '../features/mfa/admin_mfa_enroll_page.dart';
+import '../features/notifications/admin_notification_history_page.dart';
 import '../features/subscriptions/admin_subscription_detail_page.dart';
 import '../features/subscriptions/admin_subscription_search_page.dart';
 import '../features/support/admin_support_ticket_detail_page.dart';
@@ -36,6 +39,15 @@ const _themeModuleRoles = {AdminRole.superAdmin, AdminRole.content};
 /// Papéis que enxergam o módulo "Suporte" (docs/12 seção 2: support =
 /// "suporte com dados mínimos").
 const _supportModuleRoles = {AdminRole.superAdmin, AdminRole.support};
+
+/// Papéis que enxergam o módulo "Notificações" do painel (docs/12 seção
+/// 8) — mesmo conjunto de Suporte: aviso operacional é uma ação de
+/// suporte/operação, não tem papel próprio na tabela de docs/12 seção 2.
+const _notificationModuleRoles = {AdminRole.superAdmin, AdminRole.support};
+
+/// Só `super_admin` enxerga o dashboard (docs/12 seção 2: "configuração
+/// geral" — visão cross-domínio).
+const _dashboardModuleRoles = {AdminRole.superAdmin};
 
 /// Rotas do painel administrativo Web e guard único de autorização.
 ///
@@ -75,6 +87,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               _themeModuleRoles.contains(role) ? null : '/admin/home',
             _ when loc.startsWith('/admin/support') =>
               _supportModuleRoles.contains(role) ? null : '/admin/home',
+            _ when loc.startsWith('/admin/notifications') =>
+              _notificationModuleRoles.contains(role) ? null : '/admin/home',
+            _
+                when loc.startsWith('/admin/dashboard') ||
+                    loc.startsWith('/admin/audit-log') =>
+              _dashboardModuleRoles.contains(role) ? null : '/admin/home',
             _ => '/admin/home',
           },
         },
@@ -142,6 +160,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => AdminSupportTicketDetailPage(
           ticketId: state.pathParameters['ticketId']!,
         ),
+      ),
+      GoRoute(
+        path: '/admin/notifications',
+        builder: (context, state) => const AdminNotificationHistoryPage(),
+      ),
+      GoRoute(
+        path: '/admin/dashboard',
+        builder: (context, state) => const AdminDashboardPage(),
+      ),
+      GoRoute(
+        path: '/admin/audit-log',
+        builder: (context, state) => const AdminAuditLogPage(),
       ),
     ],
   );
