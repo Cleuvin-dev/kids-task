@@ -49,6 +49,23 @@ Incidente envolvendo dados de criança é prioridade máxima (docs/10 seção 14
 
 Reaproveita docs/10 seção 16 e docs/15 seções 16-17 — não duplicado aqui.
 
-## 6. Contatos e responsabilidades
+## 6. Testar em aparelho físico
+
+**Decisão do proprietário do produto**: testes manuais e `flutter test
+integration_test` rodam em aparelho físico Android conectado por USB —
+nunca em emulador. Não reabrir essa opção sem pedido explícito.
+
+1. Conectar o aparelho por USB e autorizar a depuração USB quando o
+   Android pedir;
+2. Confirmar que o aparelho aparece em `flutter devices` (aparece com o
+   nome do modelo, não como `emulator-*`);
+3. `flutter test integration_test` (ou `flutter run`) apontando o `-d`
+   para o ID do aparelho listado;
+4. Sem projeto Supabase real (bloqueio já registrado), o app abre até a
+   tela de acesso comum com credenciais placeholder — qualquer ação que
+   fale com o backend falha com erro genérico, o que é esperado (ver
+   "Build de verificação manual" em `docs/IMPLEMENTATION_STATUS.md`).
+
+## 7. Contatos e responsabilidades
 
 Pendente (docs/18 seção 4): e-mail de suporte, contato de privacidade/encarregado, horários de atendimento, responsável de plantão. Preencher antes do lançamento.

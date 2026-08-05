@@ -156,7 +156,7 @@ nunca fingidos como prontos.
 - [x] revisão de consentimento — achado real corrigido (`revoke_consent` não existia, docs/10 seção 4 exige "consulta e revogação"); texto de retenção/terceiros adicionado; identificação do controlador e explicação infantil curta ficaram de fora (dependem de dado que não existe / risco de mexer numa tela já testada sem validação visual — registrado);
 - [x] revisão de SDKs — inventário completo, sem SDK de anúncio/analytics/crash de terceiro;
 - [x] pentest/segurança — auto-revisão de código encontrou e corrigiu uma falha real de ordenação de autorização (`respond_family_deletion`/`cancel_family_deletion` verificavam estado do pedido antes de checar se quem chamou pertence à família) e adicionou o teste de isolamento entre famílias que faltava; **não substitui um pentest externo contra ambiente real**;
-- [x] testes E2E — `integration_test` configurado com um smoke test real; fluxos profundos exigem projeto Supabase real para exercitar de ponta a ponta;
+- [x] testes E2E — `integration_test` configurado com um smoke test real, pendente de executar em aparelho físico Android conectado por USB (decisão do proprietário: nunca em emulador); fluxos profundos além exigem projeto Supabase real para exercitar de ponta a ponta;
 - [x] desempenho — revisão de código encontrou e corrigiu três listas sem paginação que cresceriam sem limite (histórico de KidsCoins, histórico de resgates); sem medição em dispositivo/ambiente real;
 - [x] acessibilidade — 3 `IconButton` sem `tooltip` corrigidos no app móvel (o painel já estava 100% coberto); sem auditoria com leitor de tela real;
 - [ ] Google Play Families — decisão de categoria pendente (docs/18 seção 5);

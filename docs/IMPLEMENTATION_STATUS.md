@@ -907,11 +907,13 @@ foi construído; os que não são engenharia estão registrados em
 - `integration_test/app_test.dart` (docs/15 seção 1: "Integração Flutter"):
   scaffold real com o pacote `integration_test`, um smoke test que abre o
   app e confirma a tela de acesso comum — mesmo teste de
-  `test/widget_test.dart`, mas executável num dispositivo/emulador de
+  `test/widget_test.dart`, mas executável num dispositivo físico de
   verdade via `flutter test integration_test`, não só no sandbox do
-  `flutter_test`. Fluxos além da tela de acesso (onboarding, tarefas,
-  aprovação) exigem um projeto Supabase real para exercitar de ponta a
-  ponta — mesmo bloqueio de sempre.
+  `flutter_test`. **Decisão do proprietário do produto**: testar em
+  aparelho físico conectado (Android via USB), nunca em emulador — não
+  reabrir essa opção sem pedido explícito. Fluxos além da tela de acesso
+  (onboarding, tarefas, aprovação) exigem um projeto Supabase real para
+  exercitar de ponta a ponta — mesmo bloqueio de sempre.
 
 ### Runbooks
 
@@ -972,7 +974,7 @@ ambiente infantil") totalmente respeitado, sem precisar remover nada.
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
 | `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (11) | ✅ 65/65 passando |
-| `flutter test integration_test` | apps/mobile | ⛔ Pacote configurado e smoke test escrito; não executado nesta máquina de forma estável (emulador Android disponível, mas o processo não permaneceu de pé entre chamadas de ferramenta neste ambiente) — ver docs/18 seção 7 |
+| `flutter test integration_test` | apps/mobile | ⛔ Pacote configurado e smoke test escrito; ainda não executado — o proprietário do produto decidiu testar em aparelho físico conectado (não em emulador), pendente de conectar o aparelho — ver docs/18 seção 7 |
 | `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 7 migrations novas do Marco 8 e o pgTAP de exclusão dupla/exportação/retenção (32 asserções, total 376 nos Marcos 2-8) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
@@ -1076,10 +1078,13 @@ um Postgres/Supabase de verdade ainda, só revisado manualmente:
 5. Gerar `apps/mobile/env/dev.json` apontando pro projeto real (formato em
    `.env.example`) e rebuildar — hoje o app só abre até a tela de acesso
    comum com credenciais placeholder;
-6. Rodar `flutter test integration_test` num dispositivo/emulador real
-   (infraestrutura pronta desde o Marco 8, não executado com sucesso
-   nesta máquina) — com um backend real, fluxos além do smoke test atual
-   passam a ser possíveis de escrever.
+6. Rodar `flutter test integration_test` num **aparelho físico Android
+   conectado por USB** (infraestrutura pronta desde o Marco 8, ainda não
+   executada) — decisão do proprietário do produto: testar em aparelho
+   físico, não em emulador (`flutter devices` deve listar o aparelho
+   depois de conectado e com depuração USB autorizada). Com um backend
+   real, fluxos além do smoke test atual passam a ser possíveis de
+   escrever.
 
 **(b) Decisões que não são engenharia**, todas já registradas em
 `docs/18_PENDENCIAS_NAO_BLOQUEANTES.md` — revisão jurídica completa

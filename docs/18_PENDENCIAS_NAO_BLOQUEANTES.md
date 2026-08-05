@@ -162,9 +162,12 @@ Pendências específicas do Marco 8 — Privacidade e release
   verificação de senha nova; revisar se isso é suficiente ou se merece
   reautenticação real numa fatia futura;
 - Testes E2E (`apps/mobile/integration_test/`): infraestrutura pronta
-  (pacote `integration_test`, um smoke test real), mas fluxos além da
-  tela de acesso comum exigem um projeto Supabase real para exercitar de
-  ponta a ponta — mesmo bloqueio de sempre;
+  (pacote `integration_test`, um smoke test real), ainda não executada.
+  **Decisão do proprietário do produto**: rodar em aparelho físico Android
+  conectado por USB, nunca em emulador — não reabrir essa opção sem pedido
+  explícito. Pendente de conectar o aparelho (`flutter devices` deve
+  listá-lo com depuração USB autorizada) e, para fluxos além da tela de
+  acesso comum, de um projeto Supabase real — mesmo bloqueio de sempre;
 - Auditoria de acessibilidade completa (WCAG AA, leitor de tela, navegação
   por teclado no painel Web) não foi feita com ferramentas reais de
   acessibilidade — só uma revisão de código (tooltips de `IconButton`
