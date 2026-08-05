@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/access/access_page.dart';
 import '../features/access/child_access_page.dart';
+import '../features/access/family_blocked_page.dart';
 import '../features/access/guardian_sign_in_page.dart';
 import '../features/access/guardian_sign_up_page.dart';
 import '../features/child_home/child_home_page.dart';
@@ -50,6 +51,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             loc == '/access/child' ? null : '/access/child',
           UnboundGuardianSession() =>
             loc.startsWith('/onboarding') ? null : '/onboarding/consent',
+          GuardianFamilyBlocked() =>
+            loc == '/access/family-blocked' ? null : '/access/family-blocked',
           GuardianSession() =>
             loc.startsWith('/guardian') ? null : '/guardian/home',
           ChildSession() => loc.startsWith('/child') ? null : '/child/home',
@@ -70,6 +73,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/access/child',
         builder: (context, state) => const ChildAccessPage(),
+      ),
+      GoRoute(
+        path: '/access/family-blocked',
+        builder: (context, state) =>
+            FamilyBlockedPage(status: _currentFamilyBlockedStatus(ref)),
       ),
       GoRoute(
         path: '/onboarding/consent',
@@ -232,6 +240,14 @@ String? _currentFamilyId(Ref ref) {
   return switch (session) {
     GuardianSession(:final familyId) => familyId,
     _ => null,
+  };
+}
+
+String _currentFamilyBlockedStatus(Ref ref) {
+  final session = ref.read(resolvedSessionProvider).valueOrNull;
+  return switch (session) {
+    GuardianFamilyBlocked(:final status) => status,
+    _ => 'blocked',
   };
 }
 

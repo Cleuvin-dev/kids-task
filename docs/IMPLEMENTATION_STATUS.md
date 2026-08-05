@@ -10,12 +10,14 @@ concluído **parcialmente** (central interna funciona de ponta a ponta;
 push de verdade via FCM/APNs está bloqueado por falta de projeto Firebase
 real — ver "Bloqueios"). Marco 7 — Premium e Painel iniciado
 **parcialmente**: backend de assinaturas (fatia 1), fundação do painel Web
-— login separado + MFA obrigatório + auditoria (fatia 2) — e o primeiro
-módulo real, Assinaturas (fatia 3: busca de família, plano efetivo,
-override de suporte) estão prontos; `apps/admin_web` ainda não tem
-famílias/usuários, conteúdo, notificações nem suporte. Este documento e o
-`git log` são a fonte de verdade do que já existe; ler esta seção e a
-"Próxima ação" antes de continuar.
+— login separado + MFA obrigatório + auditoria (fatia 2), módulo
+Assinaturas (fatia 3: busca de família, plano efetivo, override de
+suporte) e módulo "Famílias e usuários" (fatia 4: busca, detalhe com
+identidade infantil oculta por padrão, aparelhos, consentimentos e
+alteração de status com revogação de aparelhos infantis) estão prontos;
+`apps/admin_web` ainda não tem conteúdo, notificações nem suporte. Este
+documento e o `git log` são a fonte de verdade do que já existe; ler esta
+seção e a "Próxima ação" antes de continuar.
 
 ## Repositório
 
@@ -60,6 +62,15 @@ ponta a ponta:
   (backend) de forma síncrona, com `RouterRefreshNotifier` (via `ref.listen`)
   reagindo a qualquer mudança de sessão — nenhuma rota abre um shell por
   flag local.
+- **Marco 7 (fatia 4)** — `SessionRoleResolver` ganhou um novo estado,
+  `GuardianFamilyBlocked`: quando `families.status` (lido junto da consulta
+  a `family_members`, via `families(status)`) está em `blocked`/
+  `deletion_pending`/`deleted`, o responsável cai em `/access/family-blocked`
+  (`FamilyBlockedPage`) em vez do shell normal — mesmo guard síncrono do
+  resto do router. `restricted` continua caindo em `GuardianSession` (sem
+  tela de restrição granular ainda). É o outro lado de
+  `admin_set_family_status` (ver "Backend do módulo Famílias e usuários"
+  abaixo): o painel bloqueia, o app aplica.
 - **Marco 2** — tarefas e rotina, sobre a base de família/criança do Marco 1:
   - Responsável (`/guardian/children/:childId/tasks`): lista de tarefas da
     criança, criar/editar num único formulário (`task_form_page.dart`) que
@@ -188,6 +199,34 @@ distintas.
     `subscriptions`, `subscription_events`, conceder/revogar override) —
     as duas últimas já gravam a própria auditoria no banco
     (`record_admin_audit_log`), sem chamada duplicada do lado do Flutter.
+- **Marco 7 (fatia 4)** — módulo "Famílias e usuários" (docs/12 seção 4),
+  visível só para `super_admin`/`support` (`billing` tem leitura entre
+  famílias no banco, herdada de `families_select_admin`, mas não ganha este
+  módulo no painel — não é seu papel por docs/12 seção 2):
+  - `/admin/families`: mesma busca por ID/e-mail de `admin_search_families`
+    (fatia 3), reaproveitada num contexto diferente do painel.
+  - `/admin/families/:familyId`: status, plano, responsáveis; crianças
+    listadas só com `status`/`age_mode` (`admin_list_family_children` —
+    nunca nome/apelido/nascimento/avatar, docs/12 seção 4: "dados infantis
+    ficam ocultos até uma ação justificada de suporte"), com botão "Revelar
+    identidade" por criança (`admin_reveal_child_identity`, exige
+    justificativa, audita, mostra o nome só nesta sessão do painel);
+    aparelhos vinculados (ativo/revogado); consentimentos; botão "Alterar
+    status" (docs/12 seção 11) com motivo obrigatório para qualquer um dos
+    5 estados de `families.status`.
+  - `packages/data_access/src/admin/admin_family_repository.dart`:
+    `AdminFamilyRepository` — as funções de revelar identidade e alterar
+    status já gravam a própria auditoria no banco, sem chamada duplicada do
+    lado do Flutter (mesmo princípio da fatia 3).
+  - Efeito real de "bloquear uma família" (não só um rótulo): `admin_set_
+    family_status` revoga todos os `child_device_bindings` ativos da
+    família quando o novo status sai de `active`/`restricted` — a criança
+    perde a sessão no próximo resolve, mesmo mecanismo de
+    `revoke_child_device` do Marco 1. Reativar não volta a autorizar o
+    aparelho sozinho (decisão de segurança deliberada, ver comentário na
+    migration). Do lado do responsável, `SessionRoleResolver` (app móvel)
+    passa a tratar `families.status` fora de `active`/`restricted` como um
+    estado de sessão bloqueado — ver "apps/mobile" acima.
 
 ### Backend (Supabase)
 
@@ -490,6 +529,56 @@ fatia (ver "Próxima ação").
   assinatura que não está em override); expiração automática; privilégio
   mínimo.
 
+### Backend do módulo Famílias e usuários (Marco 7, fatia 4)
+
+- Migrations (`supabase/migrations/202607311000{44..48}_*.sql`).
+- `family_status_events` (ledger append-only, mesmo padrão de
+  `subscription_events`/`task_events`/`redemption_events` — é o que dá
+  idempotência real a `admin_set_family_status`, não `audit_logs`, que é
+  genérica entre módulos); RLS de select só `super_admin`/`support`.
+- `admin_list_family_children`/`admin_reveal_child_identity`: por que são
+  funções e não uma policy de RLS em `child_profiles` — RLS é por linha,
+  não por coluna, então uma policy de select exporia nome/nascimento/avatar
+  junto com status/age_mode de uma vez só. `admin_list_family_children`
+  (`super_admin`/`support`/`billing`, mesmos papéis de
+  `families_select_admin`) nunca devolve identidade;
+  `admin_reveal_child_identity` (`super_admin`/`support` só) exige
+  justificativa e grava auditoria antes de devolver
+  nome/apelido/avatar/nascimento — herda a exigência de `aal2` de
+  `record_admin_audit_log` (fatia 2), então revelar sem segundo fator
+  verificado falha a chamada inteira.
+- RLS admin direta (sem função) em `child_device_bindings`/
+  `consent_records` (`super_admin`/`support`) — essas duas tabelas não têm
+  identidade infantil na própria linha, então uma policy de select comum é
+  suficiente (ao contrário de `child_profiles`).
+- `admin_set_family_status` (docs/12 seção 11: "exige motivo; não apaga
+  dados; revoga ou restringe sessões conforme risco; notifica responsáveis
+  quando apropriado; permite revisão e reversão auditada"): `super_admin`/
+  `support`, motivo e `p_idempotency_key` obrigatórios, rejeita status
+  inválido e reafirmar o status já vigente. "Não apaga dados": só troca
+  `families.status` (os 5 estados já existiam no check constraint desde o
+  Marco 1). Ao sair de `active`/`restricted`, revoga todo
+  `child_device_bindings` ativo da família (mesmo efeito de
+  `revoke_child_device`, aplicado a todas as crianças) e notifica os
+  responsáveis ativos via `emit_notification` (nunca em linguagem
+  punitiva, nunca ao voltar para `active`). Grava `family_status_events` e
+  `record_admin_audit_log`. Simplificação registrada: reativar não
+  restaura os aparelhos revogados automaticamente — o responsável precisa
+  parear de novo, decisão deliberada para não reabrir uma sessão sem
+  verificação nova.
+- Sessão do responsável (Supabase Auth/GoTrue) não pode ser invalidada por
+  uma função SQL comum sem `service_role` do Auth Admin API — por isso o
+  bloqueio do lado do responsável é aplicado no app (`SessionRoleResolver`,
+  ver "apps/mobile" acima), não no banco.
+- pgTAP: `supabase/tests/database/100_marco7_admin_families_test.sql`
+  (32 asserções) cobrindo: RLS admin de aparelhos/consentimentos;
+  `admin_list_family_children` nunca devolve identidade e respeita papel;
+  `admin_reveal_child_identity` exige papel, justificativa e `aal2`;
+  `admin_set_family_status` (controle de acesso, validação, idempotência,
+  revogação de aparelhos ao bloquear, notificação aos dois responsáveis,
+  auditoria, reativar não restaura aparelho nem notifica de novo);
+  privilégio mínimo.
+
 ### CI
 
 - `.github/workflows/ci.yml` (criado no Marco 0): formatação/análise/teste
@@ -507,7 +596,7 @@ fatia (ver "Próxima ação").
 | 4 — XP e progressão | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos **não implementados** — adiados para o Marco 5 |
 | 5 — Temas e idade | **Concluído** | Ver seções acima; testes abaixo. Desbloqueios de cosméticos (avatar/moldura/medalha por nível+plano) **continuam não implementados** — sem marco designado ainda. Adaptação visual por faixa etária (docs/06 seção 7 — linguagem/densidade de UI por 2-7/8-10/11-13+) também não foi construída: hoje só a paleta de cores muda por tema |
 | 6 — Notificações | **Parcial** | Central interna completa e testada; push real (FCM/APNs) bloqueado por falta de projeto Firebase (bloqueio 5). Matriz de eventos parcialmente coberta — ver seção acima |
-| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria) e primeiro módulo real (Assinaturas: busca de família, plano efetivo, override de suporte) prontos — ver seções acima. `apps/admin_web` ainda não tem famílias/usuários, conteúdo, notificações nem suporte |
+| 7 — Premium e painel | **Parcial** | Backend de assinaturas, fundação do painel Web (login separado + MFA obrigatório + auditoria), módulo Assinaturas (busca de família, plano efetivo, override de suporte) e módulo Famílias e usuários (busca, detalhe com identidade infantil oculta por padrão, aparelhos, consentimentos, alteração de status) prontos — ver seções acima. `apps/admin_web` ainda não tem conteúdo, notificações nem suporte |
 | 8 — Privacidade e release | Não iniciado | — |
 
 ## Testes (executados localmente em 05/08/2026)
@@ -516,8 +605,8 @@ fatia (ver "Próxima ação").
 |---|---|---|
 | `dart format --set-exit-if-changed .` | domain, data_access, design_system, apps/mobile, apps/admin_web | ✅ Sem alterações pendentes |
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
-| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (3) | ✅ 57/57 passando |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 5 migrations novas e o pgTAP do módulo Assinaturas (32 asserções, total 239 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (6) | ✅ 60/60 passando |
+| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 5 migrations novas e o pgTAP do módulo Famílias e usuários (32 asserções, total 271 nos Marcos 2-7) foram revisados manualmente linha a linha, execução real pendente do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
 
 ## Bloqueios
@@ -529,9 +618,10 @@ fatia (ver "Próxima ação").
    tipos e assinaturas, mas **não foram executadas** contra um Postgres
    real. Isso inclui o pgTAP de assinaturas
    (`70_marco7_subscriptions_test.sql`), o de administradores da
-   plataforma (`80_marco7_platform_admin_test.sql`) e o do módulo
-   Assinaturas do painel (`90_marco7_admin_subscriptions_test.sql`), que só
-   serão confirmados quando rodarem em CI ou numa máquina com Docker.
+   plataforma (`80_marco7_platform_admin_test.sql`), o do módulo
+   Assinaturas do painel (`90_marco7_admin_subscriptions_test.sql`) e o do
+   módulo Famílias e usuários (`100_marco7_admin_families_test.sql`), que
+   só serão confirmados quando rodarem em CI ou numa máquina com Docker.
 2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
    `20260731100015_task_cron_jobs.sql` (e, desde a fatia 3 do Marco 7,
    também `20260731100042_admin_subscription_cron.sql`, que agenda
@@ -581,31 +671,24 @@ o fluxo completo de ponta a ponta.
 
 ## Próxima ação
 
-**Marco 7 (fatia 4) — Módulo "Famílias e usuários"** (docs/12 seção 4):
-login, MFA, auditoria (fatia 2) e Assinaturas (fatia 3) estão prontos.
-A fundação para este módulo já existe — `families_select_admin`
-(`super_admin`/`support`/`billing`) e `admin_search_families` (fatia 3) já
-cobrem a busca por família/e-mail e os campos básicos (status, plano,
-responsáveis, quantidade de crianças) — falta:
-- RLS admin para o que a tela de detalhe precisa além disso:
-  `child_device_bindings` (aparelhos ativos) e `consent_records`
-  (consentimentos), hoje só visíveis à própria família;
-- `admin_set_family_status` (docs/12 seção 11: bloquear/restringir exige
-  motivo, não apaga dado, revoga/restringe sessão, notifica quando
-  apropriado, é reversível e auditado — reaproveitar
-  `record_admin_audit_log` e, para notificar, `emit_notification` do
-  Marco 6) — os quatro estados além de `active`/`deleted` já existem no
-  `check` de `families.status` desde o Marco 1;
-- não esconder nome de criança por padrão fora de uma ação de suporte
-  justificada (docs/12 seção 4: "dados infantis ficam ocultos até uma ação
-  justificada de suporte" — `admin_search_families` de hoje nem devolve
-  dado de criança, então isso é sobretudo para a tela de detalhe).
+**Marco 7 (fatia 5) — Módulo "Temas e conteúdo"** (docs/12 seção 6): login,
+MFA, auditoria (fatia 2), Assinaturas (fatia 3) e Famílias e usuários
+(fatia 4) estão prontos. Falta:
+- publicar os temas `draft` do Marco 5 (Mundo Encantado, Herói Aracnídeo —
+  hoje sem arte própria, então publicar de verdade continua bloqueado até
+  existir conteúdo; a tela em si pode existir e operar sobre os temas já
+  publicados enquanto isso);
+- CRUD de rascunho de tema (criar, upload de asset, validar manifest,
+  pré-visualizar por faixa etária, definir gratuito/Premium, publicar,
+  retirar sem quebrar famílias atuais — docs/12 seção 6);
+- fila de solicitações Premium (`theme_requests`, já existe desde o
+  Marco 5 sem nenhuma tela administrativa consumindo).
 
-Depois: "Temas e conteúdo" (seção 6, inclui publicar os temas `draft` do
-Marco 5) e "Suporte" (seção 9). "Gestão de papéis" (seção 2, `super_admin`
-promover outros administradores pela UI) continua sem prioridade definida
-— provisionar um admin é manual (abaixo) e nenhum módulo até agora
-dependeu disso de verdade.
+Depois: "Suporte" (seção 9) e "Notificações" do painel (seção 8: templates,
+histórico de entrega, reprocessamento). "Gestão de papéis" (seção 2,
+`super_admin` promover outros administradores pela UI) continua sem
+prioridade definida — provisionar um admin é manual (abaixo) e nenhum
+módulo até agora dependeu disso de verdade.
 
 Um administrador ainda precisa ser provisionado manualmente para testar
 qualquer módulo (`service_role`: criar o usuário no Supabase Auth e inserir

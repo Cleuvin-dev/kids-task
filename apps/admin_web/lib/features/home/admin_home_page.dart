@@ -9,8 +9,8 @@ import 'package:go_router/go_router.dart';
 ///
 /// Só os módulos já construídos aparecem, e só para quem tem o papel
 /// certo (docs/12 seção 12: "nenhum operador acessa módulo fora de seu
-/// papel") — famílias/usuários, conteúdo, notificações e suporte ainda
-/// não existem (ver docs/IMPLEMENTATION_STATUS.md, "Próxima ação").
+/// papel") — conteúdo, notificações e suporte ainda não existem (ver
+/// docs/IMPLEMENTATION_STATUS.md, "Próxima ação").
 class AdminHomePage extends ConsumerWidget {
   const AdminHomePage({super.key, required this.role});
 
@@ -21,6 +21,8 @@ class AdminHomePage extends ConsumerWidget {
     final tokens = context.kidsTaskTokens;
     final canSeeSubscriptions =
         role == AdminRole.superAdmin || role == AdminRole.billing;
+    final canSeeFamilies =
+        role == AdminRole.superAdmin || role == AdminRole.support;
 
     return Scaffold(
       backgroundColor: tokens.colorBackground,
@@ -66,11 +68,24 @@ class AdminHomePage extends ConsumerWidget {
                       onTap: () => context.push('/admin/subscriptions'),
                     ),
                   ),
-                if (!canSeeSubscriptions)
+                if (canSeeFamilies)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.family_restroom_outlined),
+                      title: const Text('Famílias e usuários'),
+                      subtitle: const Text(
+                        'Buscar família, ver responsáveis/crianças/'
+                        'aparelhos/consentimentos e alterar status',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/admin/families'),
+                    ),
+                  ),
+                if (!canSeeSubscriptions && !canSeeFamilies)
                   const Text(
                     'Nenhum módulo disponível para o seu papel ainda — '
-                    'famílias, conteúdo, notificações e suporte chegam em '
-                    'próximas fatias.',
+                    'conteúdo, notificações e suporte chegam em próximas '
+                    'fatias.',
                     textAlign: TextAlign.center,
                   ),
               ],

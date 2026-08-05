@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/access/admin_sign_in_page.dart';
+import '../features/families/admin_family_detail_page.dart';
+import '../features/families/admin_family_search_page.dart';
 import '../features/home/admin_home_page.dart';
 import '../features/mfa/admin_mfa_challenge_page.dart';
 import '../features/mfa/admin_mfa_enroll_page.dart';
@@ -17,6 +19,12 @@ import 'router_refresh_notifier.dart';
 /// Papéis que enxergam o módulo "Assinaturas" (docs/12 seção 2: billing =
 /// "planos, produtos e assinaturas"; super_admin sempre tem visão geral).
 const _subscriptionModuleRoles = {AdminRole.superAdmin, AdminRole.billing};
+
+/// Papéis que enxergam o módulo "Famílias e usuários" (docs/12 seção 11:
+/// bloquear/revelar identidade são ações de suporte e segurança — billing
+/// tem leitura entre famílias no banco só para o módulo Assinaturas, não
+/// ganha este módulo próprio).
+const _familyModuleRoles = {AdminRole.superAdmin, AdminRole.support};
 
 /// Rotas do painel administrativo Web e guard único de autorização.
 ///
@@ -50,6 +58,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             _ when loc.startsWith('/admin/home') => null,
             _ when loc.startsWith('/admin/subscriptions') =>
               _subscriptionModuleRoles.contains(role) ? null : '/admin/home',
+            _ when loc.startsWith('/admin/families') =>
+              _familyModuleRoles.contains(role) ? null : '/admin/home',
             _ => '/admin/home',
           },
         },
@@ -94,6 +104,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             familyName: extra?['familyName'] as String?,
           );
         },
+      ),
+      GoRoute(
+        path: '/admin/families',
+        builder: (context, state) => const AdminFamilySearchPage(),
+      ),
+      GoRoute(
+        path: '/admin/families/:familyId',
+        builder: (context, state) =>
+            AdminFamilyDetailPage(familyId: state.pathParameters['familyId']!),
       ),
     ],
   );

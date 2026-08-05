@@ -30,6 +30,29 @@ class GuardianSession extends ResolvedSession {
   final UserRole role; // familyOwner ou familyGuardian
 }
 
+/// `families.status` (docs/09) fora de `active`/`restricted` — família
+/// bloqueada, com exclusão pendente ou excluída pelo painel administrativo
+/// (docs/12 seção 11: "revoga ou restringe sessões conforme risco"). O
+/// responsável não entra no shell normal enquanto isso for verdade; a
+/// sessão é revalidada a cada troca de estado de autenticação
+/// ([RouterRefreshNotifier]), então reverter o status no painel libera o
+/// acesso sem o responsável precisar deslogar/logar de novo.
+///
+/// `restricted` continua caindo em [GuardianSession] — sem uma tela de
+/// restrição granular ainda, tratar como bloqueio criaria uma barreira que
+/// o produto não pediu para este estado mais brando.
+class GuardianFamilyBlocked extends ResolvedSession {
+  const GuardianFamilyBlocked({
+    required this.profileId,
+    required this.familyId,
+    required this.status,
+  });
+
+  final String profileId;
+  final String familyId;
+  final String status; // 'blocked' | 'deletion_pending' | 'deleted'
+}
+
 class ChildSession extends ResolvedSession {
   const ChildSession({
     required this.childId,
@@ -71,7 +94,7 @@ class SessionRoleResolver {
       if (!isAnonymous) {
         final membership = await _client
             .from('family_members')
-            .select('family_id, role')
+            .select('family_id, role, families(status)')
             .eq('profile_id', session.user.id)
             .eq('status', 'active')
             .limit(1)
@@ -81,9 +104,25 @@ class SessionRoleResolver {
           return UnboundGuardianSession(profileId: session.user.id);
         }
 
+        final familyId = membership['family_id'] as String;
+        final familyStatus =
+            (membership['families'] as Map<String, dynamic>?)?['status']
+                as String? ??
+            'active';
+
+        if (familyStatus == 'blocked' ||
+            familyStatus == 'deletion_pending' ||
+            familyStatus == 'deleted') {
+          return GuardianFamilyBlocked(
+            profileId: session.user.id,
+            familyId: familyId,
+            status: familyStatus,
+          );
+        }
+
         return GuardianSession(
           profileId: session.user.id,
-          familyId: membership['family_id'] as String,
+          familyId: familyId,
           role: UserRole.fromWireName(membership['role'] as String),
         );
       }
