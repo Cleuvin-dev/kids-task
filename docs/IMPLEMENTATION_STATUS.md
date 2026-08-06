@@ -967,6 +967,44 @@ ambiente infantil") totalmente respeitado, sem precisar remover nada.
 | 7 — Premium e painel | **Concluído** | Backend de assinaturas, fundação do painel Web, módulos Assinaturas/Famílias e usuários/Temas e conteúdo/Suporte/Notificações e dashboard de métricas + log de auditoria prontos — ver seções acima. Lacunas conhecidas (não bloqueiam a conclusão do marco, mesmo espírito do Marco 5/6): push real, templates/reprocessamento de notificação e anexos privados de ticket bloqueados por infraestrutura externa; gestão de papéis e publicar temas `draft` são pendências não bloqueantes (docs/18) |
 | 8 — Privacidade e release | **Concluído** | Fluxo de exclusão dupla, exportação de dados, retenção, revogação de consentimento, revisão de SDKs/segurança/acessibilidade/desempenho e runbooks prontos — ver seção "Marco 8" acima. Google Play Families, App Store Kids, TestFlight e revisão jurídica não são tarefas de engenharia — pendências registradas em docs/18 |
 
+## Status de layout e design (mobile + admin_web)
+
+Pergunta recorrente ("o layout já está finalizado?") — resumo para não
+reabrir a investigação inteira toda vez que ela voltar.
+
+- **Mecanismo de tema: finalizado e ligado de ponta a ponta** (Marco 5,
+  ver seção acima) — tema azul/rosa do responsável e tema individual da
+  criança aplicados de verdade nas duas árvores de rotas (`ShellRoute` +
+  `buildGuardianTheme`/`buildKidsThemeBySlug`), com fallback seguro para
+  slug desconhecido/asset ausente (docs/06 seção 6). Quatro temas com
+  build real (`kids_default`, `block_world`, `space_adventure`,
+  `castles_quest`); ícone do app, splash nativo e favicon/ícones do
+  `admin_web` já gerados a partir de assets reais processados
+  (`packages/design_system/assets`). Acessibilidade: `admin_web` 100%
+  coberto (tooltips em todo `IconButton`), app mobile com 3 `IconButton`
+  corrigidos no Marco 8.
+- **Não finalizado — arte/marca definitiva** (docs/18 seção 2, "usar
+  placeholders próprios enquanto não decidido"): logotipo final, ícone
+  oficial, mascote, fonte da marca, biblioteca de sons licenciada,
+  catálogo de avatares/acessórios. Dois dos seis temas do catálogo
+  pretendido (Mundo Encantado, Herói Aracnídeo) ficam `draft` só por
+  falta de arte — o mecanismo do painel para publicar já existe desde o
+  Marco 7 fatia 5.
+- **Não construído — adaptação por faixa etária** (docs/06 seção 7,
+  docs/16 seção 7): hoje só a paleta de cor muda por tema; densidade e
+  linguagem de UI diferenciadas para 2-7, 8-10 e 11-13+ anos não foram
+  implementadas. Nenhuma animação de recompensa existe ainda para aplicar
+  "reduzir movimento" — o token `motionReward` está definido no design
+  system, mas sem uso real em nenhuma tela.
+- **Não verificado**: nenhuma tela foi validada visualmente em
+  dispositivo físico nem com leitor de tela real (WCAG AA) — só revisão
+  de código (docs/18 seção 7).
+
+Em uma frase: a **arquitetura/mecanismo de tema** está pronta e
+funcionando nos dois apps; o que falta é **arte definitiva de marca** e
+a **camada de adaptação por idade**, ambas decisões de produto/design,
+não pendências de engenharia em aberto.
+
 ## Testes (executados localmente em 05/08/2026)
 
 | Comando | Escopo | Resultado |
