@@ -21,13 +21,14 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 begin
   if not public.is_active_platform_admin(array['super_admin', 'content']) then
     raise exception 'FORBIDDEN';
   end if;
 
   return query
-  select tr.id, tr.family_id, f.name, u.email, tr.category, tr.colors, tr.description,
+  select tr.id, tr.family_id, f.name, u.email::text, tr.category, tr.colors, tr.description,
          tr.target_age_range, tr.status, tr.created_at
   from public.theme_requests tr
   join public.families f on f.id = tr.family_id

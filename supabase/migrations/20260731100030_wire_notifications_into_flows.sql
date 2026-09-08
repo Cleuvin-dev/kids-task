@@ -29,6 +29,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_profile_id uuid := (select auth.uid());
   v_occ record;
@@ -55,8 +56,8 @@ begin
   -- Idempotência: se essa chave já foi processada, retorna o resultado
   -- atual sem reprocessar (docs/04 seção 8).
   if exists (
-    select 1 from public.task_events
-    where occurrence_id = p_occurrence_id and idempotency_key = p_idempotency_key
+    select 1 from public.task_events te
+    where te.occurrence_id = p_occurrence_id and te.idempotency_key = p_idempotency_key
   ) then
     select w.coin_balance, w.total_xp into v_wallet
     from public.child_wallets w where w.child_id = v_occ.child_id;
@@ -192,6 +193,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_profile_id uuid := (select auth.uid());
   v_occ record;
@@ -224,8 +226,8 @@ begin
   end if;
 
   if exists (
-    select 1 from public.task_events
-    where occurrence_id = p_occurrence_id and idempotency_key = p_idempotency_key
+    select 1 from public.task_events te
+    where te.occurrence_id = p_occurrence_id and te.idempotency_key = p_idempotency_key
   ) then
     select w.coin_balance, w.total_xp into v_wallet
     from public.child_wallets w where w.child_id = v_occ.child_id;
@@ -407,6 +409,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_profile_id uuid := (select auth.uid());
   v_redemption record;
@@ -443,8 +446,8 @@ begin
   end if;
 
   if exists (
-    select 1 from public.redemption_events
-    where redemption_id = p_redemption_id and idempotency_key = p_idempotency_key
+    select 1 from public.redemption_events re
+    where re.redemption_id = p_redemption_id and re.idempotency_key = p_idempotency_key
   ) then
     select w.coin_balance into v_balance
     from public.child_wallets w where w.child_id = v_redemption.child_id;

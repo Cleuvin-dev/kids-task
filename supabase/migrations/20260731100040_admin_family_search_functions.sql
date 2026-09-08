@@ -21,6 +21,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_query text := trim(coalesce(p_query, ''));
   v_family_id uuid;
@@ -46,7 +47,7 @@ begin
     f.status,
     p.code,
     array(
-      select u.email from public.family_members fm
+      select u.email::text from public.family_members fm
       join auth.users u on u.id = fm.profile_id
       where fm.family_id = f.id and fm.status = 'active'
       order by u.email

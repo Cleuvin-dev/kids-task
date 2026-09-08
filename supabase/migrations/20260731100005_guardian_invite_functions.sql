@@ -100,6 +100,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_profile_id uuid := (select auth.uid());
   v_caller_email text;
@@ -125,8 +126,8 @@ begin
   if v_invite.accepted_at is not null then
     -- Idempotente: se quem chama já é membro ativo desta família, não é erro.
     if exists (
-      select 1 from public.family_members
-      where family_id = v_invite.family_id and profile_id = v_profile_id and status = 'active'
+      select 1 from public.family_members fm
+      where fm.family_id = v_invite.family_id and fm.profile_id = v_profile_id and fm.status = 'active'
     ) then
       return query select v_invite.family_id;
       return;

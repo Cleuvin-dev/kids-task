@@ -132,8 +132,8 @@ begin
   end if;
 
   if exists (
-    select 1 from public.redemption_events
-    where redemption_id = p_redemption_id and idempotency_key = p_idempotency_key
+    select 1 from public.redemption_events re
+    where re.redemption_id = p_redemption_id and re.idempotency_key = p_idempotency_key
   ) then
     select w.coin_balance into v_balance
     from public.child_wallets w where w.child_id = v_redemption.child_id;
@@ -220,6 +220,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_profile_id uuid := (select auth.uid());
   v_redemption record;
@@ -245,8 +246,8 @@ begin
   end if;
 
   if exists (
-    select 1 from public.redemption_events
-    where redemption_id = p_redemption_id and idempotency_key = p_idempotency_key
+    select 1 from public.redemption_events re
+    where re.redemption_id = p_redemption_id and re.idempotency_key = p_idempotency_key
   ) then
     return query select v_redemption.id, v_redemption.status;
     return;
@@ -279,6 +280,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_profile_id uuid := (select auth.uid());
   v_redemption record;
@@ -310,8 +312,8 @@ begin
   end if;
 
   if exists (
-    select 1 from public.redemption_events
-    where redemption_id = p_redemption_id and idempotency_key = p_idempotency_key
+    select 1 from public.redemption_events re
+    where re.redemption_id = p_redemption_id and re.idempotency_key = p_idempotency_key
   ) then
     select w.coin_balance into v_balance
     from public.child_wallets w where w.child_id = v_redemption.child_id;

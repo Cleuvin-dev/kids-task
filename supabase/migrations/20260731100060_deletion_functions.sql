@@ -18,6 +18,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_profile_id uuid := (select auth.uid());
   v_family_id uuid;
@@ -53,8 +54,8 @@ begin
   end if;
 
   if exists (
-    select 1 from public.deletion_requests
-    where family_id = v_family_id and status in ('pending_approval', 'approved')
+    select 1 from public.deletion_requests dr
+    where dr.family_id = v_family_id and dr.status in ('pending_approval', 'approved')
   ) then
     raise exception 'VALIDATION_ERROR' using detail = 'a deletion request is already in progress for this family';
   end if;

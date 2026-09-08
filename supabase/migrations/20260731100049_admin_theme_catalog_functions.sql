@@ -111,6 +111,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_status text;
 begin
@@ -134,7 +135,7 @@ begin
 
   update public.themes
   set manifest_json = p_manifest_json,
-      version = case when v_status = 'published' then version + 1 else version end
+      version = case when v_status = 'published' then public.themes.version + 1 else public.themes.version end
   where id = p_theme_id;
 
   perform public.record_admin_audit_log(
@@ -155,6 +156,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_status text;
   v_manifest jsonb;
@@ -185,7 +187,7 @@ begin
   update public.themes
   set status = 'published',
       published_at = timezone('utc', now()),
-      version = case when v_status = 'retired' then version + 1 else version end
+      version = case when v_status = 'retired' then public.themes.version + 1 else public.themes.version end
   where id = p_theme_id;
 
   perform public.record_admin_audit_log(

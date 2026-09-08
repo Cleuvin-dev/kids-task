@@ -1013,8 +1013,147 @@ não pendências de engenharia em aberto.
 | `flutter analyze` | idem | ✅ "No issues found" em todos os 5 |
 | `flutter test` | domain (29), data_access (9), design_system (10), apps/mobile (6), apps/admin_web (11) | ✅ 65/65 passando |
 | `flutter test integration_test` | apps/mobile | ⛔ Pacote configurado e smoke test escrito; ainda não executado — o proprietário do produto decidiu testar em aparelho físico conectado (não em emulador), pendente de conectar o aparelho — ver docs/18 seção 7 |
-| `supabase db lint` / `supabase test db` | supabase/ | ⛔ Exigem Docker (ainda ausente aqui, reverificado nesta fatia); as 7 migrations novas do Marco 8 e o pgTAP de exclusão dupla/exportação/retenção (32 asserções, total 376 nos Marcos 2-8) foram revisados manualmente linha a linha, execução real pendente do CI |
+| `supabase db lint --linked` | supabase/ | ✅ Executado contra o projeto real (`rdomwiykyiiuhyheujuq`) em 08/09/2026, sem depender de Docker — achou e (após correção) confirmou zero erros; ver "Primeira validação em infraestrutura real" |
+| `supabase test db --linked` | supabase/ | ⛔ Confirmado que ainda exige Docker mesmo mirando o projeto remoto (baixa a imagem `pg_prove`); as 376 asserções pgTAP acumuladas dos Marcos 2-8 seguem revisadas manualmente, execução real pendente de Docker nesta máquina ou do CI |
 | `flutter build apk --debug` / `flutter build web` / `flutter build ios --no-codesign` | apps/mobile, apps/admin_web | Não reexecutados neste ciclo (sem mudança de dependências nativas); ver Marco 0/1 para o último build real |
+
+## Primeira validação em infraestrutura real (07-08/09/2026)
+
+Primeira vez que qualquer migration deste repositório rodou contra um
+Postgres/Supabase de verdade (até aqui só revisão manual, ver "Bloqueios"
+abaixo).
+
+**Correção de projeto (08/09/2026):** a fatia de 07/09 tinha linkado e
+aplicado tudo contra um projeto `kids-task` (ref `npqoylppdijucywialug`,
+org "Orbix-Pulse") acessível só pela integração MCP deste ambiente. Essa
+conta não é a conta de desenvolvimento real do dono do produto — o CLI
+`supabase`, autenticado separadamente, só enxerga a org **"Orbix Inovacao"**
+(`bghtirchgxbyaxkswltc`), confirmada pelo usuário como a correta. O projeto
+real de desenvolvimento é **`KidsTask`** (ref `rdomwiykyiiuhyheujuq`, região
+`us-west-2`, mesma org). Estava vazio (0 tabelas); todas as 67 migrations
+foram aplicadas do zero nele via `npx supabase db push --linked`. O projeto
+`npqoylppdijucywialug`/"Orbix-Pulse" fica órfão — criado por engano na conta
+errada, sem relação com o projeto real; nada neste repositório referencia
+mais esse ref.
+
+Problemas reais só apareceram ao rodar de verdade (nenhum detectável por
+revisão manual de SQL nem pela suíte Flutter, que usa mocks):
+
+- **Erro de sintaxe** em `20260731100016_rewards_and_redemptions.sql` e
+  `20260731100025_themes_schema.sql`: `created_by uuid not null default
+  (select auth.uid())` — Postgres não aceita subquery em `DEFAULT`
+  (`SQLSTATE 0A000`). Corrigido direto nos arquivos originais (nenhuma das
+  duas migrations tinha sido aplicada em ambiente nenhum antes disso).
+- **Vazamento de privilégio `EXECUTE`**, corrigido em migration nova
+  (`20260907214801_fix_function_execute_privilege_leak.sql`): todo projeto
+  novo do Supabase concede `EXECUTE` em toda função nova automaticamente a
+  `anon`/`authenticated` (grant direto, de fábrica, não herdado de
+  `PUBLIC`). As migrations de privilégio dos Marcos 1-8 só faziam `revoke
+  execute on all functions in schema public from public`, que **não**
+  remove esse grant direto — toda função do schema `public`, inclusive
+  `verify_child_pin` e funções administrativas internas, estava executável
+  por qualquer requisição **sem sessão nenhuma** via
+  `/rest/v1/rpc/<função>`. A migration nova impede herança futura do grant
+  padrão, revoga `EXECUTE` de `anon` em tudo, e reseta `authenticated` para
+  exatamente as 51 funções pretendidas pelos Marcos 1-8.
+- **14 funções com `SQLSTATE 42702` ("column reference is ambiguous"),
+  reprodução confirmada e corrigidas nesta fatia (08/09/2026)**: toda
+  função `security definer` que declara `returns table (x uuid, ...)` (ou
+  parâmetro `OUT`) cujo nome de coluna de retorno colide com o nome de uma
+  coluna real de tabela — ex.: `complete_task_occurrence` retorna
+  `occurrence_id`, e faz `where occurrence_id = p_occurrence_id` sem
+  qualificar `task_events` — dispara erro de runtime **sempre que aquele
+  trecho executa**, porque o padrão do PL/pgSQL (`plpgsql.variable_conflict
+  = error`) é abortar diante da ambiguidade, não escolher silenciosamente
+  um lado. `supabase db lint --linked` (sem precisar de Docker) achou o
+  primeiro caso; reproduzido isoladamente contra o projeto real antes de
+  mexer em qualquer arquivo, para confirmar que era erro de execução e não
+  falso positivo do linter. Afetava: `complete_task_occurrence`,
+  `review_task_occurrence`, `skip_task_occurrence`, `review_redemption`,
+  `mark_redemption_delivered`, `cancel_approved_redemption`,
+  `request_family_deletion`, `accept_guardian_invite`,
+  `upsert_task_with_schedule`, `handle_store_notification`,
+  `admin_update_theme_manifest`, `admin_publish_theme` — ou seja, concluir
+  tarefa, aprovar/rejeitar tarefa, resgatar recompensa, excluir conta,
+  aceitar convite de responsável, criar/editar tarefa, webhook de loja e
+  publicar tema no painel estavam **todos quebrados** contra Postgres real,
+  apesar de aprovados em revisão manual e nos 65 testes Flutter (que nunca
+  executam o corpo da função). Corrigido em todos os arquivos de migration
+  originais (qualificação explícita de tabela nos `exists`/`update`
+  ambíguos, mais `#variable_conflict use_column` nas 14 funções como rede
+  de segurança contra qualquer outra referência ambígua não coberta pela
+  correção pontual) e reaplicado contra o projeto real. Duas funções
+  administrativas adicionais tinham um segundo tipo de erro (`SQLSTATE
+  42804`, `varchar(255)` retornado onde a assinatura declara `text`):
+  `admin_list_theme_requests` e `admin_search_families` — corrigido com
+  `::text`/`::text[]` explícito. `db lint --linked` re-executado após as
+  correções: **zero erros**, restam só 5 avisos cosméticos preexistentes
+  (variável de loop `i`/`v_attempt`/`v_level` sombreando uma variável já
+  declarada — padrão comum e inofensivo, sem risco de execução).
+- **`supabase test db --linked` confirmado ainda dependente de Docker**
+  local (baixa a imagem `pg_prove` via Docker mesmo mirando o projeto
+  remoto) — não dá para rodar as 376 asserções pgTAP nesta máquina até
+  Docker existir aqui; `db lint --linked` não tem essa dependência e já
+  cobriu o achado acima.
+- **`pg_cron` confirmado agendando os 6 jobs reais** (`generate-task-
+  occurrences`, `expire-due-task-occurrences`, `grant-birthday-bonus`,
+  `expire-support-overrides`, `process-scheduled-deletions`,
+  `purge-stale-operational-data`), todos `active = true`. Contagem de
+  "sete jobs" em passagens anteriores deste documento estava errada — os
+  "dois jobs que a fila `outbox_events` ainda não usa" nunca foram
+  implementados como `pg_cron` (é o mesmo gap conhecido de push real por
+  falta de projeto Firebase, não um job perdido).
+
+**Achado à parte, fora do escopo de engenharia**: um arquivo solto não
+rastreado (`Kids-task`) apareceu na raiz do repositório contendo a senha do
+banco em texto puro. ✅ Removido em 08/09/2026 (nunca foi commitado; a senha
+em si continua recuperável pelo dashboard do Supabase se precisar de novo).
+
+**Provisionamento e validação de ponta a ponta (08/09/2026), completando as
+pendências desta fatia:**
+
+- ✅ **Primeiro `platform_admin` provisionado** (runbook `docs/21` seção 2):
+  usuário criado no Supabase Auth pelo próprio dono do produto via
+  dashboard (não pelo CLI/MCP, para a chave `service_role` nunca passar
+  pelo agente — `projects api-keys` é bloqueado pelo classificador de
+  permissões exatamente por materializar essa chave), `profiles` criado
+  automaticamente pelo trigger `handle_new_auth_user`, linha inserida em
+  `platform_admins` (`role = 'super_admin'`, `active = true`,
+  `mfa_required = true` — MFA será exigido no primeiro acesso a
+  `/admin/access`). Validação módulo a módulo do painel com dados reais
+  ainda não feita — só o provisionamento.
+- ✅ **`apps/mobile/env/dev.json` gerado com credenciais reais** do projeto
+  `rdomwiykyiiuhyheujuq` (`SUPABASE_URL` + a chave `anon`/publicável — não
+  secreta, o usuário rodou `supabase projects api-keys` na própria máquina
+  e colou só essa linha, mesmo motivo do item acima). Arquivo confirmado
+  `.gitignore`d (`**/env/*.json`), nunca chega a ser commitado.
+- ✅ **App mobile rebuildado contra o projeto real**: `flutter build apk
+  --debug` (395s de Gradle) e `flutter build apk --release` (150s,
+  `app-release.apk`, 67,5 MB, assinado com a chave de debug padrão do
+  Flutter) — ambos sem erro. Ainda **não testado interativamente na UI**
+  (só confirma que compila e linka contra as credenciais reais); o fluxo
+  de ponta a ponta (cadastro, login, criar família, completar tarefa)
+  continua para o item 6 da seção "Próxima ação" abaixo (aparelho físico
+  Android).
+
+**Pendente para continuar**:
+
+1. **Commitar tudo desta sessão** — nada foi commitado ainda:
+   `20260731100016`/`20260731100025` (bug de sintaxe), a migration nova
+   `20260907214801` (privilégio EXECUTE), as correções de ambiguidade de
+   coluna nas 14 funções (arquivos: `20260731100005`, `20260731100011`,
+   `20260731100018`, `20260731100022`, `20260731100030`, `20260731100033`,
+   `20260731100040`, `20260731100049`, `20260731100050`, `20260731100060`)
+   e este próprio `IMPLEMENTATION_STATUS.md`;
+2. Rodar `supabase test db` (376 asserções pgTAP) assim que Docker existir
+   nesta máquina — único item de validação real ainda bloqueado;
+3. Validar cada módulo do painel admin com dados reais usando a conta
+   `super_admin` já provisionada;
+4. Testar o app pela UI de verdade (não só compilar) — instalar o
+   `app-release.apk` num aparelho e passar pelo fluxo de acesso comum,
+   cadastro e criação de família contra o backend real;
+5. `flutter test integration_test` num aparelho físico Android (item 6 da
+   seção "Próxima ação").
 
 ## Bloqueios
 
@@ -1034,16 +1173,13 @@ não pendências de engenharia em aberto.
    `140_marco7_admin_dashboard_test.sql`) e o do Marco 8
    (`150_marco8_deletion_and_privacy_test.sql`), que só serão confirmados
    quando rodarem em CI ou numa máquina com Docker.
-2. **`pg_cron` não confirmado no projeto Supabase real** — a migration
-   `20260731100015_task_cron_jobs.sql` (e, desde a fatia 3 do Marco 7,
-   também `20260731100042_admin_subscription_cron.sql`, que agenda
-   `expire_support_overrides`; e, desde o Marco 8,
-   `20260731100061_deletion_privileges_and_cron.sql`/
-   `20260731100064_privacy_function_privileges_and_cron.sql`, que agendam
-   `process_scheduled_deletions`/`purge_stale_operational_data`) assume
-   que a extensão está disponível (padrão em projetos Supabase Cloud), mas
-   isso só pode ser verificado quando existir um projeto real (bloqueio 4
-   abaixo).
+2. ✅ **Resolvido em 08/09/2026 — `pg_cron` confirmado no projeto Supabase
+   real**: os 6 jobs das migrations `20260731100015_task_cron_jobs.sql`,
+   `20260731100042_admin_subscription_cron.sql`,
+   `20260731100061_deletion_privileges_and_cron.sql` e
+   `20260731100064_privacy_function_privileges_and_cron.sql` estão
+   agendados e `active = true` (ver "Primeira validação em infraestrutura
+   real" acima).
 3. **Provedor de e-mail transacional não configurado** — `send-guardian-invite`
    cria o convite normalmente e retorna `email_delivery: "not_configured"` com
    o link para compartilhar manualmente. Documentado também em
@@ -1051,12 +1187,14 @@ não pendências de engenharia em aberto.
 4. **Domínio do painel/app não decidido** — o link de convite usa
    `https://app.kidstask.com.br/invite` como placeholder explícito
    (`docs/18`, seção 5).
-5. **Projetos Supabase/Firebase/lojas por ambiente ainda não existem** — como
-   no Marco 0; bloqueia testes de integração reais, não a lógica implementada.
-   No Marco 6 isso significa especificamente: sem projeto Firebase, não há
-   como registrar `firebase_messaging` no app nem enviar push de verdade
-   (FCM/APNs) — a central interna de notificações funciona independente
-   disso, mas a fila `outbox_events` fica sem nenhum worker consumindo.
+5. **Projeto Supabase de desenvolvimento já existe** (ver "Primeira
+   validação em infraestrutura real" acima — `KidsTask`,
+   `rdomwiykyiiuhyheujuq`, org Orbix Inovacao, todas as migrations
+   aplicadas); **Firebase e contas de loja ainda não existem**. Isso ainda bloqueia push real: sem
+   projeto Firebase, não há como registrar `firebase_messaging` no app nem
+   enviar push de verdade (FCM/APNs) — a central interna de notificações
+   funciona independente disso, mas a fila `outbox_events` fica sem nenhum
+   worker consumindo.
 6. **CI ainda não rodou em GitHub Actions** — pendente do primeiro push/PR.
 
 ## Build de verificação manual (release APK)
@@ -1069,21 +1207,24 @@ em `android/app/build.gradle.kts` — suficiente para instalar num aparelho
 próprio via "instalar de fontes desconhecidas", não serve para publicar na
 Play Store).
 
-Como não existe projeto Supabase real ainda (bloqueio já listado acima), o
-build usa credenciais **placeholder** (`apps/mobile/env/dev.json`, ignorado
-pelo Git). Isso significa:
+**Atualizado em 08/09/2026 — build contra o projeto real.** Até a fatia
+anterior, o build usava credenciais **placeholder**
+(`https://example.supabase.co`), então qualquer ação que falasse com o
+backend falhava com erro genérico por design. Isso não é mais o caso:
+`apps/mobile/env/dev.json` (ignorado pelo Git) agora aponta para o projeto
+`KidsTask` real (`rdomwiykyiiuhyheujuq`, `SUPABASE_URL` + chave `anon`), e
+`flutter build apk --debug`/`--release --dart-define-from-file=env/dev.json`
+rodaram sem erro (67,5 MB o release). O que isso confirma e o que ainda
+não:
 
-- o app abre normalmente até a tela de acesso comum (splash → "Sou
-  responsável"/"Sou criança"), com o ícone, o splash e o visual reais;
-- os formulários (entrar, criar conta, código da família etc.) abrem e
-  validam campos normalmente;
-- qualquer ação que precise falar com o backend de verdade (cadastrar,
-  entrar, criar família) vai falhar com erro genérico, porque
-  `https://example.supabase.co` não existe — isso é esperado, não é um bug.
-
-Quando houver um projeto Supabase real, gerar `env/dev.json` com os valores
-verdadeiros (formato documentado em `.env.example`) e rebuildar para testar
-o fluxo completo de ponta a ponta.
+- ✅ confirma que o app compila e linka contra credenciais reais de
+  produção-de-desenvolvimento;
+- ❌ **não confirma** o fluxo funcional — ninguém ainda abriu o APK
+  instalado e passou por cadastro/login/criar família/completar tarefa
+  contra o backend real pela UI. Esse teste interativo (mais
+  `flutter test integration_test` num aparelho físico Android, decisão já
+  registrada de não usar emulador) é o próximo passo pendente, não algo já
+  feito.
 
 ## Próxima ação
 
@@ -1098,24 +1239,28 @@ que nenhuma linha de código resolve sozinha.
 **(a) Validação contra infraestrutura real** — nada foi executado contra
 um Postgres/Supabase de verdade ainda, só revisado manualmente:
 
-1. Criar um projeto Supabase real de desenvolvimento (bloqueio 4) e
-   aplicar todas as migrations (`supabase/migrations/`, atualmente
-   65 arquivos cobrindo os Marcos 1-8) — primeira vez que qualquer
-   função/RLS/gatilho roda contra um Postgres de verdade;
-2. Confirmar `pg_cron` disponível (bloqueio 2) — sete jobs agendados
-   dependem disso: `generate_task_occurrences`,
-   `expire_due_task_occurrences`, `expire_support_overrides`,
-   `process_scheduled_deletions`, `purge_stale_operational_data`, mais os
-   dois que a fila `outbox_events` ainda não usa;
-3. Rodar `supabase db lint`/`supabase test db` (bloqueio 1, exige Docker
-   nesta máquina) — confirmar as 376 asserções pgTAP acumuladas dos
-   Marcos 2-8;
-4. Provisionar o primeiro `platform_admin` (runbook,
-   `docs/21_RUNBOOKS_OPERACIONAIS.md` seção 2) e validar cada módulo do
-   painel com dados reais;
-5. Gerar `apps/mobile/env/dev.json` apontando pro projeto real (formato em
-   `.env.example`) e rebuildar — hoje o app só abre até a tela de acesso
-   comum com credenciais placeholder;
+1. ✅ **Feito em 07-08/09/2026** — projeto Supabase real de desenvolvimento
+   (`KidsTask`, `rdomwiykyiiuhyheujuq`, org Orbix Inovacao) com todas as
+   67 migrations aplicadas — ver "Primeira validação em infraestrutura
+   real" acima para os bugs achados e corrigidos (incluindo as 14 funções
+   com erro de ambiguidade de coluna);
+2. ✅ **Feito em 08/09/2026** — `pg_cron` confirmado: 6 jobs agendados e
+   ativos (`generate-task-occurrences`, `expire-due-task-occurrences`,
+   `grant-birthday-bonus`, `expire-support-overrides`,
+   `process-scheduled-deletions`, `purge-stale-operational-data`);
+3. ✅ **Feito em 08/09/2026** — `supabase db lint --linked`: zero erros
+   após as correções (só 5 avisos cosméticos preexistentes). `supabase
+   test db --linked` confirmado ainda bloqueado por Docker local (baixa a
+   imagem `pg_prove` mesmo mirando o projeto remoto) — as 376 asserções
+   pgTAP seguem sem execução real até Docker existir aqui ou rodar no CI;
+4. ✅ **Feito em 08/09/2026** — primeiro `platform_admin` provisionado
+   (`cleuvin@gmail.com`, `super_admin`, runbook `docs/21` seção 2).
+   Validar cada módulo do painel com dados reais ainda está pendente
+   (ver "Pendente para continuar" acima);
+5. ✅ **Feito em 08/09/2026** — `apps/mobile/env/dev.json` gerado com
+   valores reais do projeto `rdomwiykyiiuhyheujuq` e app rebuildado
+   (debug + release, ambos sem erro) — ver "Build de verificação manual"
+   abaixo para o que isso confirma e o que ainda não;
 6. Rodar `flutter test integration_test` num **aparelho físico Android
    conectado por USB** (infraestrutura pronta desde o Marco 8, ainda não
    executada) — decisão do proprietário do produto: testar em aparelho

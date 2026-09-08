@@ -63,7 +63,7 @@ create table public.theme_requests (
   target_age_range text,
   consent boolean not null,
   status text not null default 'pending' check (status in ('pending', 'reviewed')),
-  created_by uuid not null default (select auth.uid()) references public.profiles (id),
+  created_by uuid not null default auth.uid() references public.profiles (id),
   created_at timestamptz not null default timezone('utc', now())
 );
 

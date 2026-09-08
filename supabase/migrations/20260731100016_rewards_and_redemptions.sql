@@ -17,7 +17,7 @@ create table public.rewards (
   cash_equivalent_cents integer check (cash_equivalent_cents >= 0),
   currency text not null default 'BRL',
   active boolean not null default true,
-  created_by uuid not null default (select auth.uid()) references public.profiles (id),
+  created_by uuid not null default auth.uid() references public.profiles (id),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );

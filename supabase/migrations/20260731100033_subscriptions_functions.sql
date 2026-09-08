@@ -177,6 +177,7 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
   v_family_id uuid;
   v_current record;
@@ -240,7 +241,7 @@ begin
       grace_period_end = p_grace_period_end,
       auto_renew = (p_event_type not in ('cancellation', 'expiration', 'revocation')),
       last_verified_at = coalesce(p_store_event_at, timezone('utc', now()))
-  where family_id = v_family_id;
+  where public.subscriptions.family_id = v_family_id;
 
   perform public.apply_subscription_transition(v_family_id);
 

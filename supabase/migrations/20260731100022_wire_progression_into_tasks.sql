@@ -52,8 +52,8 @@ begin
   -- Idempotência: se essa chave já foi processada, retorna o resultado
   -- atual sem reprocessar (docs/04 seção 8).
   if exists (
-    select 1 from public.task_events
-    where occurrence_id = p_occurrence_id and idempotency_key = p_idempotency_key
+    select 1 from public.task_events te
+    where te.occurrence_id = p_occurrence_id and te.idempotency_key = p_idempotency_key
   ) then
     select w.coin_balance, w.total_xp into v_wallet
     from public.child_wallets w where w.child_id = v_occ.child_id;
@@ -200,8 +200,8 @@ begin
   end if;
 
   if exists (
-    select 1 from public.task_events
-    where occurrence_id = p_occurrence_id and idempotency_key = p_idempotency_key
+    select 1 from public.task_events te
+    where te.occurrence_id = p_occurrence_id and te.idempotency_key = p_idempotency_key
   ) then
     select w.coin_balance, w.total_xp into v_wallet
     from public.child_wallets w where w.child_id = v_occ.child_id;
