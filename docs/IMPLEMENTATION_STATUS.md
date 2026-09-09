@@ -1138,20 +1138,79 @@ pendências desta fatia:**
 
 **Pendente para continuar**:
 
-1. **Commitar tudo desta sessão** — nada foi commitado ainda:
-   `20260731100016`/`20260731100025` (bug de sintaxe), a migration nova
-   `20260907214801` (privilégio EXECUTE), as correções de ambiguidade de
-   coluna nas 14 funções (arquivos: `20260731100005`, `20260731100011`,
-   `20260731100018`, `20260731100022`, `20260731100030`, `20260731100033`,
-   `20260731100040`, `20260731100049`, `20260731100050`, `20260731100060`)
-   e este próprio `IMPLEMENTATION_STATUS.md`;
-2. Rodar `supabase test db` (376 asserções pgTAP) assim que Docker existir
+1. ✅ **Feito em 08/09/2026** — commit `367e4d0` (correções de sintaxe,
+   privilégio EXECUTE e as 14 funções ambíguas + este
+   `IMPLEMENTATION_STATUS.md`) e `git push` para `origin/main`;
+
+2. **PRÓXIMO PASSO — validar o painel admin (`admin_web`) com dados reais**,
+   usando a conta `super_admin` já provisionada (`cleuvin@gmail.com`,
+   `platform_admins.role = 'super_admin'`, ver "Provisionamento e validação
+   de ponta a ponta" acima). Ainda não iniciado. Passo a passo:
+   1. Criar `apps/admin_web/env/dev.json` (não existe ainda — só
+      `apps/mobile/env/dev.json` foi gerado nesta fatia) com o mesmo par
+      `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` do projeto real
+      (`rdomwiykyiiuhyheujuq`); é o mesmo `SupabaseEnv.fromDartDefine()` de
+      `packages/data_access`, mesmo mecanismo do app mobile
+      (`.env.example`, `**/env/*.json` já no `.gitignore`);
+   2. Rodar `flutter run -d chrome --dart-define-from-file=env/dev.json`
+      dentro de `apps/admin_web`;
+   3. Entrar em `/admin/access` com `cleuvin@gmail.com` e completar o
+      enrolamento de MFA em `/admin/mfa/enroll` no primeiro login (runbook
+      `docs/21` seção 2, passo 3) — precisa de um app autenticador TOTP à
+      mão, é interativo, não dá para automatizar;
+   4. Percorrer cada módulo do painel com o dado real que já existe (ver
+      "Família de teste criada" abaixo) e comparar contra os critérios de
+      aceite de `docs/12_PAINEL_ADMINISTRATIVO_WEB.md` seção 12, módulo por
+      módulo: **Dashboard** (seção 3), **Famílias e usuários** (seção 4),
+      **Assinaturas** (seção 5), **Temas e conteúdo** (seção 6, inclui
+      publicar/despublicar tema `draft`), **Planos e configuração**
+      (seção 7), **Notificações** (seção 8), **Suporte** (seção 9),
+      **Segurança e auditoria** (seção 10, `audit_logs` deve registrar as
+      ações acima);
+   5. Registrar aqui o resultado por módulo.
+
+   **Família de teste criada (09/09/2026)**, chamando as mesmas RPCs que o
+   app mobile chamaria (não pela UI — sem aparelho/emulador conectado nesta
+   máquina nem ferramenta de automação de navegador disponível; ver decisão
+   registrada abaixo). Dado real de verdade no projeto
+   `rdomwiykyiiuhyheujuq`, não simulado:
+   - Responsável (conta descartável, só para QA — não é dado de usuário
+     real): `kidstask.familia.teste@gmail.com` / `TesteKidsTask2026!`.
+     Criada via `POST /auth/v1/signup` (endpoint público, chave `anon`, sem
+     tocar `service_role`). Precisou que o usuário desativasse
+     temporariamente "Confirm email" no dashboard (Authentication > Sign
+     In / Providers > Email) — o projeto exige confirmação por padrão e o
+     rate limit do mailer padrão do Supabase (bem baixo no free tier)
+     bloqueou a primeira tentativa de e-mail real de confirmação. Essa
+     configuração **continua desativada** no projeto; decidir se
+     reativa antes de qualquer teste com e-mail real de responsável;
+   - Família: `family_id = b1ade12e-3eb6-442d-a588-36ca24187ae6`, código
+     `F4RM-43TE`, tema `blue`, plano `free` (padrão);
+   - Criança: `child_id = 7db54cd2-5a8d-4601-aa5f-5e73fb4de3a6`, nome
+     "Teste", nascimento 2018-05-10;
+   - Tarefa: `task_id = 7ca6f3d7-2fbe-4d17-b617-e55611b28c39`, "Arrumar a
+     cama", recorrente todo dia, `approval_mode = manual` (para exercitar
+     o fluxo de aprovação no painel/app), 10 KidsCoins + 5 XP. Confirmado
+     `generate_task_occurrences` rodando dentro de
+     `upsert_task_with_schedule`: **30 ocorrências criadas** na janela
+     móvel de 30 dias — validação incidental, contra dado real, de que a
+     correção do bug de ambiguidade de coluna em
+     `upsert_task_with_schedule` (ver "Primeira validação em
+     infraestrutura real" acima) está funcionando.
+
+   Ainda faltam para essa família ter dado em todos os módulos do painel:
+   nenhuma ocorrência foi completada/aprovada ainda (módulo Famílias e
+   usuários vai mostrar tudo "pending"), não há resgate de recompensa nem
+   ticket de suporte nem solicitação de tema — dá para gerar chamando as
+   mesmas RPCs (`complete_task_occurrence`, `request_redemption` etc.) se
+   for útil ter mais variedade de estado antes de validar o painel.
+
+3. Rodar `supabase test db` (376 asserções pgTAP) assim que Docker existir
    nesta máquina — único item de validação real ainda bloqueado;
-3. Validar cada módulo do painel admin com dados reais usando a conta
-   `super_admin` já provisionada;
-4. Testar o app pela UI de verdade (não só compilar) — instalar o
+4. Testar o app mobile pela UI de verdade (não só compilar) — instalar o
    `app-release.apk` num aparelho e passar pelo fluxo de acesso comum,
-   cadastro e criação de família contra o backend real;
+   cadastro e criação de família contra o backend real (isso também
+   resolveria o "dado real inexistente" do item 2.5 acima);
 5. `flutter test integration_test` num aparelho físico Android (item 6 da
    seção "Próxima ação").
 
