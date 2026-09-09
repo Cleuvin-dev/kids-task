@@ -1233,12 +1233,42 @@ pendências desta fatia:**
      sequência rápida durante testes manuais; usar o build estático servido
      (`localhost:5050`, já no ar) para não precisar reiniciar nada, e
      esperar alguns minutos entre tentativas de login se um 429 aparecer.
-   - Login ainda não validado com sucesso. Retomar tentando **uma única
-     vez** depois que o rate limit resetar (não há como saber o tempo
-     exato de reset sem acesso ao painel de configuração de Auth do
-     Supabase — se persistir, considerar aumentar o limite em
-     Authentication > Rate Limits no dashboard, só para o ambiente de
-     desenvolvimento).
+   - **Segunda tentativa (mesmo dia), ~20 min depois: mesmo erro 429**,
+     inclusive em aba anônima sem sessão nenhuma salva. Isso descarta
+     "sessão antiga tentando renovar" como causa única — parece que o
+     simples carregamento da página (que sempre tenta uma renovação de
+     sessão automática do `supabase_flutter` ao iniciar) já consome de
+     novo a cota assim que ela reseta, antes que dê tempo de clicar em
+     "Entrar". Decisão registrada com o dono do produto: **parar de
+     tentar por 1h+ sem abrir a página nenhuma vez**, em vez de repetir
+     tentativas curtas — cada carregamento parece resetar a janela de
+     espera.
+
+   **ONDE PARAMOS (09/09/2026) — retomar por aqui:**
+   1. Login do painel **continua não validado** — bloqueado por rate
+      limit do Supabase (`over_request_rate_limit`, HTTP 429 em
+      `/auth/v1/token`), não por bug de código. **Não abrir
+      `http://localhost:5050` nem tentar logar antes de passar 1h+ sem
+      nenhuma tentativa** (decisão do dono do produto — abrir a página já
+      consome a cota sozinho);
+   2. O servidor estático (`npx serve -l 5050 build/web`, dentro de
+      `apps/admin_web`) pode não estar mais rodando quando a sessão
+      retomar (processo em background desta sessão) — conferir e, se
+      preciso, subir de novo (mesmo comando);
+   3. **O `build/web` atual está desatualizado** em relação ao código
+      fonte: foi gerado enquanto os prints de diagnóstico temporários
+      ainda existiam em `router.dart`/`admin_session_resolver.dart` (já
+      revertidos no código-fonte, commit `7c86193`). Rodar
+      `flutter build web --dart-define-from-file=env/dev.json` de novo
+      dentro de `apps/admin_web` antes da próxima tentativa de login, para
+      servir o build limpo;
+   4. Depois que o login funcionar de fato, seguir o passo a passo do
+      item 2 acima (módulo por módulo, critérios de aceite `docs/12`
+      seção 12) — nada disso foi feito ainda, só o provisionamento e a
+      família de teste;
+   5. Se o 429 persistir por muito tempo mesmo após 1h+ de espera,
+      considerar checar/ajustar Authentication > Rate Limits no dashboard
+      do Supabase (só o dono do produto tem acesso a essa tela).
 
 3. Rodar `supabase test db` (376 asserções pgTAP) assim que Docker existir
    nesta máquina — único item de validação real ainda bloqueado;
