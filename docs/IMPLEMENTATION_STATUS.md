@@ -1205,6 +1205,41 @@ pendências desta fatia:**
    mesmas RPCs (`complete_task_occurrence`, `request_redemption` etc.) se
    for útil ter mais variedade de estado antes de validar o painel.
 
+   **Primeira tentativa de login (09/09/2026): bloqueada por rate limit do
+   Supabase, ainda não é um resultado de validação.** Duas descobertas de
+   ambiente, nenhuma delas bug de código:
+   - `flutter run -d chrome` mostrou-se **instável nesta máquina** —
+     travou repetidas vezes com
+     `DartDevelopmentServiceException: WebSocketChannelException:
+     WebSocketException: ... was not upgraded to websocket` (bug conhecido
+     de tooling do Flutter em Windows, não relacionado ao código do
+     projeto). **Alternativa mais estável usada a partir daqui**:
+     `flutter build web --dart-define-from-file=env/dev.json` (gera
+     `apps/admin_web/build/web`) servido por `npx serve -l 5050 build/web`
+     — sem a camada de debug/DevTools que travava, só que sem hot reload
+     (rebuildar manualmente a cada mudança de código);
+   - O login em si (`grant_type=password`) nunca chegou a ser testado de
+     fato: cada reinício do `flutter run` (6 tentativas) mais os testes de
+     `create_family`/`create_child` via API para a família de teste
+     consumiram o **rate limit de requisições de autenticação** do projeto
+     Supabase (`over_request_rate_limit`, HTTP 429) — confirmado via
+     print de diagnóstico temporário (já revertido) que capturou
+     `AuthApiException(message: Request rate limit reached, statusCode:
+     429, code: over_request_rate_limit)` bloqueando até
+     `grant_type=refresh_token` automático no carregamento da página, em
+     aba anônima (sem sessão salva) inclusive — ou seja, é limite do
+     **projeto**, não de uma sessão/navegador específico. **Lição para a
+     próxima sessão**: evitar reiniciar o `admin_web` repetidamente em
+     sequência rápida durante testes manuais; usar o build estático servido
+     (`localhost:5050`, já no ar) para não precisar reiniciar nada, e
+     esperar alguns minutos entre tentativas de login se um 429 aparecer.
+   - Login ainda não validado com sucesso. Retomar tentando **uma única
+     vez** depois que o rate limit resetar (não há como saber o tempo
+     exato de reset sem acesso ao painel de configuração de Auth do
+     Supabase — se persistir, considerar aumentar o limite em
+     Authentication > Rate Limits no dashboard, só para o ambiente de
+     desenvolvimento).
+
 3. Rodar `supabase test db` (376 asserções pgTAP) assim que Docker existir
    nesta máquina — único item de validação real ainda bloqueado;
 4. Testar o app mobile pela UI de verdade (não só compilar) — instalar o
